@@ -8,6 +8,17 @@
 
 > **API Key 不会离开你的浏览器。** 所有请求都由前端 `fetch` 直连你填的 Base URL —— 你可以在 DevTools → Network 里亲眼确认没有任何请求发往第三方域名。
 
+![首页](./docs/images/01-home.png)
+
+<p align="center">
+  <img src="./docs/images/02-detect.png" width="49%" alt="检测页：填入 Base URL 与 API Key，选择协议与探测项目" />
+  <img src="./docs/images/03-integration.png" width="49%" alt="集成指南：三步把检测通过的接口接入你自己的项目" />
+</p>
+
+<p align="center">
+  <sub>左：检测页 —— 填 Base URL 与 Key，选协议与探测项，全程在浏览器内完成 ｜ 右：集成指南 —— 检测通过后如何接进你自己的代码</sub>
+</p>
+
 ---
 
 ## 目录

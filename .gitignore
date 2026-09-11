@@ -21,3 +21,8 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# TypeScript 增量编译信息（tsc -b 产生，不应入库）
+*.tsbuildinfo
+# Vite 配置热更新产生的临时文件
+vite.config.ts.timestamp-*
