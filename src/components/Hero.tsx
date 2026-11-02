@@ -1,16 +1,11 @@
 import type { StageId } from '../types';
 import { StageTrack } from './StageTrack';
+import { useI18n } from '../lib/i18n';
 import { ArrowRight, Sparkles, Zap, ShieldCheck, Activity, Cpu, Lock, Gauge } from 'lucide-react';
 
 interface HeroProps {
   onStartClick: () => void;
 }
-
-const STATS = [
-  { icon: Zap, value: '< 500ms', label: '平均诊断耗时' },
-  { icon: ShieldCheck, value: '7 项', label: '安全检查维度' },
-  { icon: Activity, value: '4 模型', label: '主流 AI API' },
-];
 
 const FLOATING_CARDS = [
   {
@@ -51,6 +46,14 @@ const FLOATING_CARDS = [
 export function Hero({ onStartClick }: HeroProps) {
   const currentStage: StageId = 'idle';
   const stageProgress = 0;
+  const { t } = useI18n();
+
+  const stats = [
+    { icon: Zap, value: '< 500ms', label: t('平均诊断耗时', 'Avg. check time') },
+    { icon: ShieldCheck, value: t('7 项', '7'), label: t('安全检查维度', 'Safety dimensions') },
+    { icon: Activity, value: t('4 模型', '4 models'), label: t('主流 AI API', 'Mainstream AI APIs') },
+  ];
+
   return (
     <section id="top" className="relative pt-32 pb-20 lg:pt-40 lg:pb-28 overflow-hidden">
       <div className="relative max-w-7xl mx-auto px-5 sm:px-6 lg:px-8" style={{ zIndex: 1 }}>
@@ -58,35 +61,37 @@ export function Hero({ onStartClick }: HeroProps) {
           <div className="animate-fade-in-up">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-500/10 border border-primary-500/20 text-primary-300 text-xs font-medium mb-6 backdrop-blur-sm">
               <Sparkles size={13} className="animate-glow-pulse" />
-              <span>AI API 接口健康诊断工具</span>
+              <span>{t('AI API 接口健康诊断工具', 'API health diagnostics for AI apps')}</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-ink-50 leading-[1.1] tracking-tight text-balance">
-              让 AI API
+              {t('让 AI API', 'See your AI API')}
               <span className="block mt-2">
                 <span className="gradient-text glow-text">
-                  诊断可视化
+                  {t('诊断可视化', 'health, live')}
                 </span>
               </span>
             </h1>
 
             <p className="mt-6 text-base sm:text-lg text-ink-300 leading-relaxed max-w-xl">
-              从连接握手到流式解析，从延迟分析到安全审计——
-              ZGo API Doctor 为你呈现 AI 接口的完整健康画像。
+              {t(
+                '从连接握手到流式解析，从延迟分析到安全审计——ZGo API Doctor 为你呈现 AI 接口的完整健康画像。',
+                'From the TLS handshake to SSE parsing, from latency breakdown to auth audit — ZGo API Doctor gives you the full health picture of an AI endpoint.',
+              )}
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <button onClick={onStartClick} className="btn-primary group">
-                <span>立即体验诊断</span>
+                <span>{t('立即体验诊断', 'Run a check')}</span>
                 <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
               </button>
               <a href="#how-it-works" className="btn-secondary">
-                了解工作原理
+                {t('了解工作原理', 'How it works')}
               </a>
             </div>
 
             <div className="mt-10 flex items-center gap-6 sm:gap-8">
-              {STATS.map((stat) => (
+              {stats.map((stat) => (
                 <div key={stat.label} className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-lg bg-ink-800/60 border border-ink-700/50 flex items-center justify-center flex-shrink-0 backdrop-blur-sm">
                     <stat.icon size={16} className="text-primary-400" />

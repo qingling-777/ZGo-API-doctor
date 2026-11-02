@@ -31,6 +31,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { composeShareUrl, copyText } from '../lib/share';
+import { useI18n, pick, type Lang } from '../lib/i18n';
 
 type Phase = 'input' | 'connecting' | 'discovered' | 'probing' | 'complete' | 'report';
 
@@ -42,8 +43,8 @@ interface DiscoveredOption {
 }
 
 const PROBE_STAGES = [
-  { id: 'chat', label: 'Chat 探测', icon: Zap },
-  { id: 'sse', label: 'SSE 流式探测', icon: Gauge },
+  { id: 'chat', label: 'Chat 探测', labelEn: 'Chat probe', icon: Zap },
+  { id: 'sse', label: 'SSE 流式探测', labelEn: 'SSE stream probe', icon: Gauge },
 ];
 
 function maskKey(key: string): string {
@@ -53,6 +54,7 @@ function maskKey(key: string): string {
 
 export function DetectPage() {
   const { draft, clearDraft } = useSession();
+  const { t, lang } = useI18n();
   const [phase, setPhase] = useState<Phase>('input');
   const [baseUrl, setBaseUrl] = useState(draft?.base_url ?? '');
   const [apiKey, setApiKey] = useState(draft?.api_key ?? '');
@@ -99,7 +101,11 @@ export function DetectPage() {
 
   const handleUrlChange = (val: string) => {
     setBaseUrl(val);
-    setUrlError(val && !validateUrl(val) ? '请输入有效的 URL，例如 https://api.example.com' : '');
+    setUrlError(
+      val && !validateUrl(val)
+        ? t('请输入有效的 URL，例如 https://api.example.com', 'Enter a valid URL, e.g. https://api.example.com')
+        : ''
+    );
   };
 
   const toggleModel = (id: string) => {
@@ -155,15 +161,15 @@ export function DetectPage() {
 
   const handleStartDiscover = async () => {
     if (!baseUrl.trim() || !validateUrl(baseUrl)) {
-      setUrlError('请输入有效的 URL');
+      setUrlError(t('请输入有效的 URL', 'Enter a valid URL'));
       return;
     }
     if (!apiKey.trim() || apiKey.trim().length < 8) {
-      setError('API Key 长度不足');
+      setError(t('API Key 长度不足', 'API key is too short'));
       return;
     }
     if (!agreed) {
-      setError('请先同意本次检测授权');
+      setError(t('请先同意本次检测授权', 'Please tick the authorisation box first'));
       return;
     }
     setError('');
@@ -178,7 +184,7 @@ export function DetectPage() {
           const res = await discoverDirect(baseUrl, apiKey, protocol, false);
           if (!res.ok || !res.models || res.models.length === 0) {
             setPhase('input');
-            setError(res.message || '未能发现任何模型，请检查 Base URL 与 API Key');
+            setError(res.message || t('未能发现任何模型，请检查 Base URL 与 API Key', 'No models found — check the Base URL and API key'));
           } else {
             const opts = discoveredToOptions(res.models);
             setDiscovered(opts);
@@ -188,7 +194,7 @@ export function DetectPage() {
           }
         } catch (e) {
           setPhase('input');
-          setError(e instanceof Error ? e.message : '发现模型失败');
+          setError(e instanceof Error ? e.message : t('发现模型失败', 'Model discovery failed'));
         } finally {
           setBusy(false);
           setCurrentStage('idle');
@@ -207,7 +213,7 @@ export function DetectPage() {
     } catch (e) {
       setDiscoverMeta((prev) => (prev ? {
         ...prev,
-        keyAuth: { status: 'unknown', detail: e instanceof Error ? e.message : '校验失败' },
+        keyAuth: { status: 'unknown', detail: e instanceof Error ? e.message : t('校验失败', 'Verification failed') },
       } : prev));
     } finally {
       setVerifyingKey(false);
@@ -238,7 +244,7 @@ export function DetectPage() {
           clearDraft();
         } catch (e) {
           setPhase('discovered');
-          setError(e instanceof Error ? e.message : '探测失败');
+          setError(e instanceof Error ? e.message : t('探测失败', 'Probe failed'));
         } finally {
           setBusy(false);
         }
@@ -274,7 +280,10 @@ export function DetectPage() {
     if (!report) return;
     const url = composeShareUrl(report);
     const ok = await copyText(url);
-    showToast(ok ? '分享链接已复制' : '复制失败，请手动复制', ok ? 'ok' : 'err');
+    showToast(
+      ok ? t('分享链接已复制', 'Share link copied') : t('复制失败，请手动复制', 'Copy failed — please copy manually'),
+      ok ? 'ok' : 'err'
+    );
   };
 
   /**
@@ -287,12 +296,12 @@ export function DetectPage() {
     if (!report) return;
     setExporting(true);
     try {
-      const html = buildStandaloneReportHtml(report);
+      const html = buildStandaloneReportHtml(report, lang);
       const host = (() => { try { return new URL(report.baseUrl).hostname; } catch { return 'report'; } })();
       saveBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `api-doctor-${host}-report.html`);
-      showToast('报告已导出（HTML 文档）');
+      showToast(t('报告已导出（HTML 文档）', 'Report exported as a standalone HTML file'));
     } catch (e) {
-      showToast(e instanceof Error ? e.message : '导出报告失败', 'err');
+      showToast(e instanceof Error ? e.message : t('导出报告失败', 'Report export failed'), 'err');
     } finally {
       setExporting(false);
     }
@@ -315,13 +324,16 @@ export function DetectPage() {
         <div className="mb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-500/10 border border-primary-500/20 text-primary-300 text-xs font-medium mb-4">
             <Search size={13} />
-            <span>API 健康检测</span>
+            <span>{t('API 健康检测', 'API HEALTH CHECK')}</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold text-ink-50 tracking-tight">
-            检测一个 API 接口
+            {t('检测一个 API 接口', 'Check an API endpoint')}
           </h1>
           <p className="mt-3 text-ink-300 leading-relaxed max-w-2xl">
-            先读取模型列表，不进行对话测试。发现模型后，你可以选择任意数量的模型，并选择 Chat、SSE 或两者进行低消耗探测。
+            {t(
+              '先读取模型列表，不进行对话测试。发现模型后，你可以选择任意数量的模型，并选择 Chat、SSE 或两者进行低消耗探测。',
+              'First it reads the model list — no chat calls. Once models are discovered, pick as many as you like and run cheap Chat and/or SSE probes against them.'
+            )}
           </p>
         </div>
 
@@ -353,16 +365,19 @@ export function DetectPage() {
               {/* 连接方式：本开源版固定为「浏览器直连」（信任核心） */}
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="label-mono">连接方式</span>
+                  <span className="label-mono">{t('连接方式', 'CONNECTION')}</span>
                   <div className="inline-flex rounded-xl border border-ink-700/40 overflow-hidden text-xs">
                     <span className="px-3 py-1.5 flex items-center gap-1.5 bg-primary-500/15 text-primary-300">
-                      <Lock size={12} />浏览器直连
+                      <Lock size={12} />
+                      {t('浏览器直连', 'Direct from browser')}
                     </span>
                   </div>
                 </div>
                 <p className="text-2xs text-ink-400 leading-relaxed">
-                  请求直接从本机浏览器发往你填的 Base URL，API Key 不会经过任何服务器——可在浏览器
-                  DevTools → Network 亲自验证。若目标接口禁止跨域（CORS），见 README 的常见问题。
+                  {t(
+                    '请求直接从本机浏览器发往你填的 Base URL，API Key 不会经过任何服务器——可在浏览器 DevTools → Network 亲自验证。若目标接口禁止跨域（CORS），见 README 的常见问题。',
+                    'Requests go straight from this browser to the Base URL you enter, so your API key never touches any server — verify it yourself in DevTools → Network. If the target endpoint blocks cross-origin calls (CORS), see the FAQ in the README.'
+                  )}
                 </p>
               </div>
 
@@ -390,7 +405,7 @@ export function DetectPage() {
                   </button>
                 </div>
                 {apiKey && (
-                  <p className="mt-2 text-2xs font-mono text-ink-400">Key 预览: {maskedKey}</p>
+                  <p className="mt-2 text-2xs font-mono text-ink-400">{t('Key 预览', 'Key preview')}: {maskedKey}</p>
                 )}
               </div>
 
@@ -398,13 +413,19 @@ export function DetectPage() {
                 <div className="flex items-start gap-2.5">
                   <ShieldCheck size={15} className="text-success-400 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-ink-300 leading-relaxed">
-                    Key 仅用于向你提供的 Base URL 发起本次探测，不训练、不出售、不共享。检测结果保存为报告记录，但 API 配置不会写入数据库。
+                    {t(
+                      'Key 仅用于向你提供的 Base URL 发起本次探测，不训练、不出售、不共享。检测结果保存为报告记录，但 API 配置不会写入数据库。',
+                      'The key is only used to call the Base URL you supplied, for this run. It is never used for training, sold, or shared. The result is kept as a report record, but your API config is never written to any database.'
+                    )}
                   </p>
                 </div>
                 <div className="flex items-start gap-2.5">
                   <Zap size={15} className="text-warning-400 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-ink-300 leading-relaxed">
-                    先请求一次 /v1/models，不进行对话测试。发现模型后，你自选模型和探测项目，模型和项目越多，请求次数越多，可能消耗更多供应商余额。
+                    {t(
+                      '先请求一次 /v1/models，不进行对话测试。发现模型后，你自选模型和探测项目，模型和项目越多，请求次数越多，可能消耗更多供应商余额。',
+                      "One /v1/models call first, with no chat traffic. After that you choose the models and probes yourself — more models and more probes means more requests, which may consume more of the provider's balance."
+                    )}
                   </p>
                 </div>
               </div>
@@ -422,7 +443,10 @@ export function DetectPage() {
                   {agreed && <Check size={13} className="text-white" strokeWidth={3} />}
                 </button>
                 <span className="text-xs text-ink-300 leading-relaxed">
-                  我同意将此配置仅用于本次检测。本次将向目标 Base URL 发起 /v1/models 请求，以及确认模型后每个模型各一次 Chat、一次 SSE 探测。
+                  {t(
+                    '我同意将此配置仅用于本次检测。本次将向目标 Base URL 发起 /v1/models 请求，以及确认模型后每个模型各一次 Chat、一次 SSE 探测。',
+                    'I agree that this config is used only for this run: one /v1/models request to the target Base URL, then one Chat and one SSE probe per model I select.'
+                  )}
                 </span>
               </label>
 
@@ -438,11 +462,11 @@ export function DetectPage() {
                 className="btn-primary w-full py-3.5"
               >
                 <Search size={18} />
-                <span>{busy ? '连接中...' : '开始低成本发现'}</span>
+                <span>{busy ? t('连接中...', 'Connecting…') : t('开始低成本发现', 'Discover models (cheap)')}</span>
               </button>
               {!agreed && baseUrl && apiKey && (
                 <p className="text-2xs text-ink-400 text-center">
-                  需要勾选"本次检测授权"才能开始正式检测
+                  {t('需要勾选「本次检测授权」才能开始正式检测', 'Tick the authorisation box to start the run')}
                 </p>
               )}
             </div>
@@ -456,9 +480,12 @@ export function DetectPage() {
               <div className="absolute inset-0 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" />
               <div className="absolute inset-2 rounded-full bg-primary-500/10 animate-ping" />
             </div>
-            <h3 className="text-lg font-semibold text-ink-50 mb-2">正在读取接口能力</h3>
+            <h3 className="text-lg font-semibold text-ink-50 mb-2">{t('正在读取接口能力', 'Reading endpoint capabilities')}</h3>
             <p className="text-sm text-ink-400 font-mono mb-4">
-              {STAGES.find((s) => s.id === currentStage)?.label || '连接中...'} · {Math.round(stageProgress)}%
+              {(() => {
+                const st = STAGES.find((s) => s.id === currentStage);
+                return st ? t(st.label, st.labelEn ?? st.label) : t('连接中...', 'Connecting…');
+              })()} · {Math.round(stageProgress)}%
             </p>
             <div className="max-w-xs mx-auto h-1 rounded-full bg-ink-800 overflow-hidden">
               <div
@@ -477,7 +504,9 @@ export function DetectPage() {
                   <Check size={18} className="text-success-400" strokeWidth={2.5} />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-ink-50">接口已连接，发现 {discovered.length} 个模型</p>
+                  <p className="text-sm font-semibold text-ink-50">
+                    {t('接口已连接，发现', 'Connected — found')} {discovered.length} {t('个模型', 'models')}
+                  </p>
                   <p className="text-xs font-mono text-ink-400 mt-0.5">
                     GET /v1/models · {discoverMeta?.status_code || 200} OK · {discoverMeta?.latency_ms ?? '-'}ms
                   </p>
@@ -497,7 +526,7 @@ export function DetectPage() {
                       className="btn-secondary text-2xs px-2.5 py-1.5 inline-flex items-center gap-1.5"
                     >
                       {verifyingKey ? <Loader2 size={12} className="animate-spin" /> : <ShieldCheck size={12} />}
-                      {verifyingKey ? '校验中…' : '验证 Key'}
+                      {verifyingKey ? t('校验中…', 'Verifying…') : t('验证 Key', 'Verify key')}
                     </button>
                   )}
                 </div>
@@ -508,10 +537,10 @@ export function DetectPage() {
               <section className="glass p-5">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div>
-                    <h4 className="text-sm font-semibold text-ink-50">选择要检测的模型</h4>
-                    <p className="text-2xs text-ink-400 mt-1">搜索并点击模型加入本次探测</p>
+                    <h4 className="text-sm font-semibold text-ink-50">{t('选择要检测的模型', 'Pick models to check')}</h4>
+                    <p className="text-2xs text-ink-400 mt-1">{t('搜索并点击模型加入本次探测', 'Search, then click a model to add it to this run')}</p>
                   </div>
-                  <span className="text-2xs font-mono text-ink-400 whitespace-nowrap">{selectedModels.length}/{discovered.length} 已选</span>
+                  <span className="text-2xs font-mono text-ink-400 whitespace-nowrap">{selectedModels.length}/{discovered.length} {t('已选', 'selected')}</span>
                 </div>
 
                 <div className="relative mb-3">
@@ -519,7 +548,7 @@ export function DetectPage() {
                   <input
                     value={modelSearch}
                     onChange={(e) => setModelSearch(e.target.value)}
-                    placeholder="搜索模型名或提供商，如 deepseek / zai / gemini"
+                    placeholder={t('搜索模型名或提供商，如 deepseek / zai / gemini', 'Search model or provider, e.g. deepseek / zai / gemini')}
                     className="w-full bg-ink-900/50 border border-ink-700/40 rounded-lg pl-9 pr-9 py-2 text-sm text-ink-100 placeholder:text-ink-500 focus:outline-none focus:border-primary-500/50 transition-colors"
                     spellCheck={false}
                   />
@@ -527,8 +556,8 @@ export function DetectPage() {
                     <button
                       onClick={() => setModelSearch('')}
                       className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-ink-400 hover:text-ink-100 transition-colors"
-                      aria-label="清空搜索"
-                      title="清空搜索"
+                      aria-label={t('清空搜索', 'Clear search')}
+                      title={t('清空搜索', 'Clear search')}
                     >
                       <X size={14} />
                     </button>
@@ -562,9 +591,11 @@ export function DetectPage() {
                   {filteredModels.length === 0 && (
                     <div className="flex flex-col items-center justify-center text-center py-8 px-4">
                       <Search size={20} className="text-ink-500 mb-2" />
-                      <p className="text-sm text-ink-400">没有匹配「{modelSearch.trim()}」的模型</p>
+                      <p className="text-sm text-ink-400">
+                        {t('没有匹配「', 'No models match “')}{modelSearch.trim()}{t('」的模型', '”')}
+                      </p>
                       <button onClick={() => setModelSearch('')} className="mt-2 text-2xs font-mono text-primary-400 hover:text-primary-300 transition-colors">
-                        清除搜索
+                        {t('清除搜索', 'Clear search')}
                       </button>
                     </div>
                   )}
@@ -573,10 +604,10 @@ export function DetectPage() {
                 <div className="mt-5 pt-4 border-t border-ink-700/30">
                   <div className="flex items-center justify-between gap-3 mb-2.5">
                     <div>
-                      <h5 className="text-xs font-semibold text-ink-100">已选择的模型预览</h5>
-                      <p className="text-2xs text-ink-500 mt-1">点击右侧移除模型</p>
+                      <h5 className="text-xs font-semibold text-ink-100">{t('已选择的模型预览', 'Selected models')}</h5>
+                      <p className="text-2xs text-ink-500 mt-1">{t('点击右侧移除模型', 'Click the × on the right to remove')}</p>
                     </div>
-                    <span className="text-2xs font-mono text-primary-300">{selectedModels.length} 个</span>
+                    <span className="text-2xs font-mono text-primary-300">{selectedModels.length} {t('个', 'selected')}</span>
                   </div>
                   {selectedModelOptions.length > 0 ? (
                     <div className="space-y-1.5">
@@ -588,8 +619,8 @@ export function DetectPage() {
                           <button
                             onClick={() => toggleModel(model.id)}
                             className="p-1 text-ink-500 hover:text-error-300 transition-colors flex-shrink-0"
-                            aria-label={`移除 ${model.name}`}
-                            title={`移除 ${model.name}`}
+                            aria-label={`${t('移除', 'Remove')} ${model.name}`}
+                            title={`${t('移除', 'Remove')} ${model.name}`}
                           >
                             <X size={13} />
                           </button>
@@ -597,18 +628,18 @@ export function DetectPage() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-ink-500 py-2">还没有选择模型</p>
+                    <p className="text-xs text-ink-500 py-2">{t('还没有选择模型', 'No models selected yet')}</p>
                   )}
                 </div>
               </section>
 
               <section className="glass p-5 lg:sticky lg:top-24">
                 <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-ink-50">检测设置</h4>
-                  <p className="text-2xs text-ink-400 mt-1">选择检测模式后开始受控探测</p>
+                  <h4 className="text-sm font-semibold text-ink-50">{t('检测设置', 'Probe settings')}</h4>
+                  <p className="text-2xs text-ink-400 mt-1">{t('选择检测模式后开始受控探测', 'Choose the probes, then start a controlled run')}</p>
                 </div>
                 <div>
-                  <h5 className="text-xs font-medium text-ink-200 mb-2.5">选择探测项目</h5>
+                  <h5 className="text-xs font-medium text-ink-200 mb-2.5">{t('选择探测项目', 'Probes')}</h5>
                   <div className="space-y-2.5">
                     {PROBE_STAGES.map((item) => {
                       const enabled = probeItems[item.id as keyof typeof probeItems];
@@ -628,8 +659,12 @@ export function DetectPage() {
                             <item.icon size={16} className={enabled ? 'text-accent-400' : 'text-ink-500'} />
                           </div>
                           <div className="flex-1">
-                            <p className={`text-sm font-medium ${enabled ? 'text-ink-50' : 'text-ink-400'}`}>{item.label}</p>
-                            <p className="text-2xs text-ink-400 mt-0.5">{enabled ? '已开启' : '未选择'}</p>
+                            <p className={`text-sm font-medium ${enabled ? 'text-ink-50' : 'text-ink-400'}`}>
+                              {t(item.label, item.labelEn)}
+                            </p>
+                            <p className="text-2xs text-ink-400 mt-0.5">
+                              {enabled ? t('已开启', 'Enabled') : t('未选择', 'Off')}
+                            </p>
                           </div>
                           <div className={`w-9 h-5 rounded-full transition-all relative ${enabled ? 'bg-accent-500' : 'bg-ink-700'}`}>
                             <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${enabled ? 'left-4' : 'left-0.5'}`} />
@@ -647,10 +682,14 @@ export function DetectPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-ink-100">
-                        预计请求数: <span className="font-mono font-bold text-warning-400">{estimatedRequests}</span> 次
+                        {t('预计请求数:', 'Estimated requests:')}{' '}
+                        <span className="font-mono font-bold text-warning-400">{estimatedRequests}</span> {t('次', 'reqs')}
                       </p>
                       <p className="text-2xs text-ink-400 mt-0.5 leading-relaxed">
-                        {selectedModels.length} 个模型 × ({Number(probeItems.chat) + Number(probeItems.sse)} 项) = {estimatedRequests} 次请求，可能消耗供应商余额
+                        {t(
+                          `${selectedModels.length} 个模型 × (${Number(probeItems.chat) + Number(probeItems.sse)} 项) = ${estimatedRequests} 次请求，可能消耗供应商余额`,
+                          `${selectedModels.length} model(s) × ${Number(probeItems.chat) + Number(probeItems.sse)} probe(s) = ${estimatedRequests} request(s) — may consume the provider's balance`
+                        )}
                       </p>
                     </div>
                   </div>
@@ -676,14 +715,14 @@ export function DetectPage() {
 
                 <div className="flex flex-col-reverse sm:flex-row gap-3 mt-5">
                   <button onClick={() => setPhase('input')} className="btn-secondary flex-1">
-                    返回修改
+                    {t('返回修改', 'Back')}
                   </button>
                   <button
                     onClick={handleStartProbe}
                     disabled={selectedModels.length === 0 || (!probeItems.chat && !probeItems.sse) || busy}
                     className="btn-primary flex-1"
                   >
-                    <span>{busy ? '探测中...' : '开始受控探测'}</span>
+                    <span>{busy ? t('探测中...', 'Probing…') : t('开始受控探测', 'Start controlled probe')}</span>
                     <ChevronRight size={16} />
                   </button>
                 </div>
@@ -697,9 +736,12 @@ export function DetectPage() {
             <div className="flex items-center gap-3 mb-6">
               <Loader2 size={20} className="text-primary-400 animate-spin" />
               <div>
-                <h3 className="text-lg font-semibold text-ink-50">正在检测模型</h3>
+                <h3 className="text-lg font-semibold text-ink-50">{t('正在检测模型', 'Probing models')}</h3>
                 <p className="text-xs font-mono text-ink-400 mt-0.5">
-                  {STAGES.find((s) => s.id === currentStage)?.label || '探测中...'} · {Math.round(stageProgress)}%
+                  {(() => {
+                    const st = STAGES.find((s) => s.id === currentStage);
+                    return st ? t(st.label, st.labelEn ?? st.label) : t('探测中...', 'Probing…');
+                  })()} · {Math.round(stageProgress)}%
                 </p>
               </div>
             </div>
@@ -744,36 +786,36 @@ export function DetectPage() {
                   <Check size={32} className="text-success-400" strokeWidth={2.5} />
                 </div>
               </div>
-              <h3 className="text-xl font-bold text-ink-50">检测完成</h3>
+              <h3 className="text-xl font-bold text-ink-50">{t('检测完成', 'Check complete')}</h3>
               <p className="text-sm text-ink-300 mt-2">
-                已完成 {report.modelCount} 个模型的探测，查看下方诊断报告
+                {t('已完成', 'Checked')} {report.modelCount} {t('个模型的探测，查看下方诊断报告', 'model(s) — see the diagnostic report below')}
               </p>
               <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
                 <button onClick={handleViewReport} className="btn-primary">
                   <FileBarChart size={16} />
-                  <span>查看诊断报告</span>
+                  <span>{t('查看诊断报告', 'View diagnostic report')}</span>
                   <ChevronRight size={16} />
                 </button>
                 <button onClick={handleReset} className="btn-secondary">
-                  重新检测
+                  {t('重新检测', 'Run again')}
                 </button>
               </div>
               <div className="mt-3 flex flex-col sm:flex-row gap-3 justify-center">
                 <button onClick={handleCopyShare} className="btn-secondary">
                   <Share2 size={15} />
-                  <span>复制分享链接</span>
+                  <span>{t('复制分享链接', 'Copy share link')}</span>
                 </button>
               </div>
             </div>
 
             <div className="glass p-5">
-              <h4 className="text-sm font-semibold text-ink-50 mb-4">快速摘要</h4>
+              <h4 className="text-sm font-semibold text-ink-50 mb-4">{t('快速摘要', 'Quick summary')}</h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  { label: '健康评分', value: `${report.score}/100`, color: 'text-success-400' },
+                  { label: t('健康评分', 'SCORE'), value: `${report.score}/100`, color: 'text-success-400' },
                   { label: 'TTFT', value: summary ? `${summary.firstByteMs ?? '-'}ms` : '-', color: 'text-primary-400' },
-                  { label: '总耗时', value: summary ? `${((summary.firstByteMs ?? 0) + (summary.chunks || 1) * (summary.chatLatencyMs || 0) * 0.3).toFixed(0)}ms` : '-', color: 'text-accent-400' },
-                  { label: '模型数', value: `${report.modelCount}`, color: 'text-ink-100' },
+                  { label: t('总耗时', 'TOTAL'), value: summary ? `${((summary.firstByteMs ?? 0) + (summary.chunks || 1) * (summary.chatLatencyMs || 0) * 0.3).toFixed(0)}ms` : '-', color: 'text-accent-400' },
+                  { label: t('模型数', 'MODELS'), value: `${report.modelCount}`, color: 'text-ink-100' },
                 ].map((stat) => (
                   <div key={stat.label} className="surface-3 p-3 text-center">
                     <p className="text-2xs font-mono text-ink-400 mb-1">{stat.label.toUpperCase()}</p>
@@ -790,11 +832,11 @@ export function DetectPage() {
             <div className="flex items-center justify-between mb-5">
               <button onClick={() => setPhase('complete')} className="btn-ghost">
                 <ArrowLeft size={14} />
-                <span>返回检测摘要</span>
+                <span>{t('返回检测摘要', 'Back to summary')}</span>
               </button>
               <button className="btn-secondary" onClick={handleExportReport} disabled={exporting}>
                 {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                <span>{exporting ? '导出中…' : '导出报告'}</span>
+                <span>{exporting ? t('导出中…', 'Exporting…') : t('导出报告', 'Export report')}</span>
               </button>
             </div>
             <div className="report-reveal__line" />
@@ -805,8 +847,8 @@ export function DetectPage() {
                   <FileBarChart size={19} className="text-success-400 relative z-10" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-ink-50">诊断报告已生成</p>
-                  <p className="text-xs text-ink-400 mt-0.5">基于本次真实探测流程的脱敏结果与证据</p>
+                  <p className="text-sm font-semibold text-ink-50">{t('诊断报告已生成', 'Diagnostic report ready')}</p>
+                  <p className="text-xs text-ink-400 mt-0.5">{t('基于本次真实探测流程的脱敏结果与证据', 'Redacted results and evidence from this actual probe run')}</p>
                 </div>
               </div>
             </div>
@@ -845,6 +887,7 @@ function PreflightPanel({ baseUrl, apiKey, protocol, models, chatEnabled, sseEna
   open: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useI18n();
   const reqs = buildPreflight(baseUrl, apiKey, protocol, models, chatEnabled, sseEnabled);
   return (
     <div className="mt-4 rounded-xl border border-ink-700/30 bg-ink-900/30 overflow-hidden">
@@ -855,14 +898,18 @@ function PreflightPanel({ baseUrl, apiKey, protocol, models, chatEnabled, sseEna
       >
         <span className="flex items-center gap-2 text-xs font-medium text-ink-200">
           <Eye size={14} className="text-primary-400" />
-          预检：本次将发送 {reqs.length} 个请求（Key 已全部脱敏）
+          {t('预检：本次将发送', 'Preflight: this run sends')} {reqs.length}{' '}
+          {t('个请求（Key 已全部脱敏）', 'request(s), all keys masked')}
         </span>
         <ChevronRight size={15} className={`text-ink-400 transition-transform ${open ? 'rotate-90' : ''}`} />
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-2">
           <p className="text-2xs text-success-400 leading-relaxed mb-1">
-            以下请求都将直接从你的浏览器发往目标 Base URL，不会经过任何中间服务器。
+            {t(
+              '以下请求都将直接从你的浏览器发往目标 Base URL，不会经过任何中间服务器。',
+              'Every request below goes straight from your browser to the target Base URL — no intermediate server.'
+            )}
           </p>
           {reqs.map((req, i) => (
             <div key={i} className="rounded-lg border border-ink-700/30 bg-ink-950/40 p-3">
@@ -872,7 +919,9 @@ function PreflightPanel({ baseUrl, apiKey, protocol, models, chatEnabled, sseEna
               </div>
               <p className="text-2xs font-mono text-ink-400 break-all mb-1.5">{req.url}</p>
               <details className="text-2xs">
-                <summary className="cursor-pointer text-ink-500 hover:text-ink-300 select-none">请求头{req.body ? ' + 请求体' : ''}</summary>
+                <summary className="cursor-pointer text-ink-500 hover:text-ink-300 select-none">
+                  {t('请求头', 'Headers')}{req.body ? t(' + 请求体', ' + body') : ''}
+                </summary>
                 <pre className="mt-1.5 bg-ink-950/70 border border-ink-700/40 rounded p-2 text-ink-300 overflow-x-auto whitespace-pre-wrap break-all">
 {Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join('\n') + (req.body ? `\n\n${req.body}` : '')}
                 </pre>
@@ -886,14 +935,15 @@ function PreflightPanel({ baseUrl, apiKey, protocol, models, chatEnabled, sseEna
 }
 
 function KeyAuthBadge({ auth }: { auth: KeyAuth }) {
+  const { t } = useI18n();
   const conf =
     auth.status === 'valid'
-      ? { label: 'API Key 有效', tone: 'text-success-400', chip: 'bg-success-500/10 border-success-500/20', dot: 'bg-success-400' }
+      ? { label: t('API Key 有效', 'API key valid'), tone: 'text-success-400', chip: 'bg-success-500/10 border-success-500/20', dot: 'bg-success-400' }
       : auth.status === 'invalid'
-      ? { label: 'API Key 无效', tone: 'text-error-400', chip: 'bg-error-500/10 border-error-500/20', dot: 'bg-error-400' }
+      ? { label: t('API Key 无效', 'API key invalid'), tone: 'text-error-400', chip: 'bg-error-500/10 border-error-500/20', dot: 'bg-error-400' }
       : auth.status === 'reachable'
-      ? { label: 'API Key 可用（待确认）', tone: 'text-warning-400', chip: 'bg-warning-500/10 border-warning-500/20', dot: 'bg-warning-400' }
-      : { label: '未校验 API Key', tone: 'text-ink-400', chip: 'bg-ink-800/30 border-ink-700/30', dot: 'bg-ink-500' };
+      ? { label: t('API Key 可用（待确认）', 'API key works (unconfirmed)'), tone: 'text-warning-400', chip: 'bg-warning-500/10 border-warning-500/20', dot: 'bg-warning-400' }
+      : { label: t('未校验 API Key', 'API key not verified'), tone: 'text-ink-400', chip: 'bg-ink-800/30 border-ink-700/30', dot: 'bg-ink-500' };
   return (
     <div className={`mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 ${conf.chip}`}>
       <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${conf.dot}`} />
@@ -901,7 +951,7 @@ function KeyAuthBadge({ auth }: { auth: KeyAuth }) {
         <p className={`text-xs font-semibold ${conf.tone}`}>{conf.label}</p>
         {auth.detail && <p className="text-2xs text-ink-400 mt-0.5 break-all">{auth.detail}</p>}
         {auth.status_code && (
-          <p className="text-2xs font-mono text-ink-500 mt-0.5">聊天冒烟 HTTP {auth.status_code}</p>
+          <p className="text-2xs font-mono text-ink-500 mt-0.5">{t('聊天冒烟 HTTP', 'Chat smoke test HTTP')} {auth.status_code}</p>
         )}
       </div>
     </div>
@@ -909,13 +959,14 @@ function KeyAuthBadge({ auth }: { auth: KeyAuth }) {
 }
 
 function ReportBody({ report, onReset }: { report: DetectionReport; onReset: () => void }) {
+  const { t, lang } = useI18n();
   const statusCard = (item: { model: string; status: string; grade: string }) => {
     const conf =
       item.status === 'healthy'
-        ? { label: '健康', color: 'text-success-400', bg: 'bg-success-500/10', border: 'border-success-500/20' }
+        ? { label: t('健康', 'HEALTHY'), color: 'text-success-400', bg: 'bg-success-500/10', border: 'border-success-500/20' }
         : item.status === 'degraded'
-        ? { label: '降级', color: 'text-warning-400', bg: 'bg-warning-500/10', border: 'border-warning-500/20' }
-        : { label: '严重', color: 'text-error-400', bg: 'bg-error-500/10', border: 'border-error-500/20' };
+        ? { label: t('降级', 'DEGRADED'), color: 'text-warning-400', bg: 'bg-warning-500/10', border: 'border-warning-500/20' }
+        : { label: t('严重', 'DOWN'), color: 'text-error-400', bg: 'bg-error-500/10', border: 'border-error-500/20' };
     return (
       <div className="flex items-center gap-3">
         <span className={`px-2 py-0.5 rounded text-2xs font-mono border ${conf.bg} ${conf.border} ${conf.color}`}>{conf.label}</span>
@@ -942,13 +993,18 @@ function ReportBody({ report, onReset }: { report: DetectionReport; onReset: () 
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium border ${
                     report.score >= 85 ? 'bg-success-500/10 border-success-500/20 text-success-400' : report.score >= 55 ? 'bg-warning-500/10 border-warning-500/20 text-warning-400' : 'bg-error-500/10 border-error-500/20 text-error-400'
                   }`}>
-                    {report.score >= 85 ? '健康' : report.score >= 55 ? '降级' : '严重'}
+                    {report.score >= 85
+                      ? t('健康', 'Healthy')
+                      : report.score >= 55
+                      ? t('降级', 'Degraded')
+                      : t('严重', 'Down')}
                   </span>
                 </div>
-                <h3 className="text-xl font-bold text-ink-50">诊断报告</h3>
+                <h3 className="text-xl font-bold text-ink-50">{t('诊断报告', 'Diagnostic report')}</h3>
                 <p className="text-xs font-mono text-ink-400 mt-1">{report.endpoint}</p>
                 <p className="text-2xs font-mono text-ink-400 mt-0.5">
-                  Key: {report.apiKeyMasked || '—'} · {new Date(report.timestamp).toLocaleString('zh-CN')}
+                  Key: {report.apiKeyMasked || '—'} ·{' '}
+                  {new Date(report.timestamp).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')}
                 </p>
               </div>
             </div>
@@ -973,7 +1029,7 @@ function ReportBody({ report, onReset }: { report: DetectionReport; onReset: () 
         <div className="glass p-5 sm:p-6 mb-4">
           <div className="flex items-center gap-2 mb-5">
             <FileBarChart size={16} className="text-primary-400" />
-            <h4 className="text-sm font-semibold text-ink-50">模型探测结果</h4>
+            <h4 className="text-sm font-semibold text-ink-50">{t('模型探测结果', 'Per-model probe results')}</h4>
             <span className="text-2xs font-mono text-ink-400 ml-auto">{report.modelCount} models</span>
           </div>
           <div className="space-y-3">
@@ -999,20 +1055,43 @@ function ReportBody({ report, onReset }: { report: DetectionReport; onReset: () 
         )}
 
         <div className="glass p-5 sm:p-6">
-          <h4 className="text-sm font-semibold text-ink-50 mb-4">诊断发现</h4>
+          <h4 className="text-sm font-semibold text-ink-50 mb-4">{t('诊断发现', 'Findings')}</h4>
           <div className="space-y-3">
             {report.models.map((m) => {
               const issues: { level: 'critical' | 'warning' | 'info' | 'healthy'; title: string; detail: string; metric?: string }[] = [];
               if (m.status === 'down') {
-                issues.push({ level: 'critical', title: '模型探测失败', detail: m.errorMessage || '对话请求失败', metric: m.errorCode || 'down' });
+                issues.push({
+                  level: 'critical',
+                  title: t('模型探测失败', 'Model probe failed'),
+                  detail: m.errorMessage || t('对话请求失败', 'The chat request failed'),
+                  metric: m.errorCode || 'down',
+                });
               } else if (m.status === 'degraded') {
-                issues.push({ level: 'warning', title: '部分通路降级', detail: 'Chat 或 SSE 未完全通过', metric: m.grade });
+                issues.push({
+                  level: 'warning',
+                  title: t('部分通路降级', 'Partially degraded'),
+                  detail: t('Chat 或 SSE 未完全通过', 'Chat and/or SSE did not fully pass'),
+                  metric: m.grade,
+                });
               }
               if (m.firstByteMs && m.firstByteMs > 800) {
-                issues.push({ level: 'warning', title: '首字节延迟偏高', detail: `TTFT ${m.firstByteMs}ms 超过 P75 基准`, metric: `${m.firstByteMs}ms` });
+                issues.push({
+                  level: 'warning',
+                  title: t('首字节延迟偏高', 'High time to first byte'),
+                  detail: t(
+                    `TTFT ${m.firstByteMs}ms 超过 P75 基准`,
+                    `TTFT ${m.firstByteMs}ms is above the 75th percentile baseline`
+                  ),
+                  metric: `${m.firstByteMs}ms`,
+                });
               }
               if (issues.length === 0) {
-                issues.push({ level: 'healthy', title: '通路状态良好', detail: 'Chat 与 SSE 均通过', metric: m.grade });
+                issues.push({
+                  level: 'healthy',
+                  title: t('通路状态良好', 'All paths healthy'),
+                  detail: t('Chat 与 SSE 均通过', 'Both Chat and SSE passed'),
+                  metric: m.grade,
+                });
               }
               const LEVEL_SEG = {
                 critical: { c: 'text-error-400', bg: 'bg-error-500/10', b: 'border-error-500/20' },
@@ -1042,7 +1121,7 @@ function ReportBody({ report, onReset }: { report: DetectionReport; onReset: () 
         <div className="mt-8 flex justify-center">
           <button onClick={onReset} className="btn-secondary">
             <ArrowLeft size={14} />
-            <span>重新检测</span>
+            <span>{t('重新检测', 'Run again')}</span>
           </button>
         </div>
       </div>
@@ -1061,11 +1140,12 @@ function SnippetCard({ baseUrl, protocol, model, apiKeyMasked }: { baseUrl: stri
   const [tab, setTab] = useState<'code' | 'agent'>('code');
   const [active, setActive] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const { t, lang } = useI18n();
 
   useEffect(() => {
     if (!baseUrl || !model) return;
-    setData(buildSnippets(baseUrl, (protocol as Protocol) || 'openai', model, apiKeyMasked));
-  }, [baseUrl, protocol, model, apiKeyMasked]);
+    setData(buildSnippets(baseUrl, (protocol as Protocol) || 'openai', model, apiKeyMasked, lang));
+  }, [baseUrl, protocol, model, apiKeyMasked, lang]);
 
   const group = tab === 'agent' ? data?.agent_configs ?? [] : data?.snippets ?? [];
   const current = group.find((x) => x.id === active) ?? group[0];
@@ -1084,29 +1164,36 @@ function SnippetCard({ baseUrl, protocol, model, apiKeyMasked }: { baseUrl: stri
   return (
     <div className="glass p-5 sm:p-6">
       <div className="flex items-center justify-between mb-1">
-        <h4 className="text-sm font-semibold text-ink-50">快速接入</h4>
-        <span className="text-2xs font-mono text-ink-400">{protocol === 'openai' ? 'OpenAI 兼容' : protocol.toUpperCase()} · {model}</span>
+        <h4 className="text-sm font-semibold text-ink-50">{t('快速接入', 'Quick integration')}</h4>
+        <span className="text-2xs font-mono text-ink-400">
+          {protocol === 'openai' ? t('OpenAI 兼容', 'OpenAI-compatible') : protocol.toUpperCase()} · {model}
+        </span>
       </div>
-      <p className="text-2xs text-ink-400 mb-4">复制模板，替换 &lt;API_KEY&gt; 为你的密钥即可调用此接口。</p>
+      <p className="text-2xs text-ink-400 mb-4">
+        {t(
+          '复制模板，替换 <API_KEY> 为你的密钥即可调用此接口。',
+          'Copy a template, drop in your real key where <API_KEY> appears, and you can call this endpoint.'
+        )}
+      </p>
 
       <div className="flex items-center gap-2 mb-4">
         <button
           onClick={() => { setTab('code'); const f = (data?.snippets ?? [])[0]; setActive(f?.id || ''); }}
           className={`px-3 py-1.5 rounded-lg text-xs ${tab === 'code' ? 'bg-primary-500/15 text-primary-400 border border-primary-500/30' : 'text-ink-400 border border-ink-700/40 hover:border-ink-600'}`}
         >
-          代码示例
+          {t('代码示例', 'Code')}
         </button>
         <button
           onClick={() => { setTab('agent'); const f = (data?.agent_configs ?? [])[0]; setActive(f?.id || ''); }}
           className={`px-3 py-1.5 rounded-lg text-xs ${tab === 'agent' ? 'bg-primary-500/15 text-primary-400 border border-primary-500/30' : 'text-ink-400 border border-ink-700/40 hover:border-ink-600'}`}
         >
-          Agent 工具接入
+          {t('Agent 工具接入', 'Agent setup')}
         </button>
       </div>
 
       {!data && (
         <div className="flex items-center gap-2 text-xs text-ink-400 py-3">
-          <Loader2 size={14} className="animate-spin text-primary-400" /> 正在生成接入模板…
+          <Loader2 size={14} className="animate-spin text-primary-400" /> {t('正在生成接入模板…', 'Building templates…')}
         </div>
       )}
 
@@ -1142,7 +1229,7 @@ function SnippetCard({ baseUrl, protocol, model, apiKeyMasked }: { baseUrl: stri
                 className="absolute top-3 right-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-ink-800/80 border border-ink-600 text-2xs text-ink-200 hover:bg-ink-700 transition-colors"
               >
                 {copied ? <Check size={12} className="text-success-400" /> : <Copy size={12} />}
-                {copied ? '已复制' : '复制'}
+                {copied ? t('已复制', 'Copied') : t('复制', 'Copy')}
               </button>
             </div>
           )}
@@ -1168,6 +1255,7 @@ function buildSnippets(
   protocol: Protocol,
   model: string,
   apiKeyMasked: string,
+  lang: Lang,
 ): { snippets: SnippetItem[]; agent_configs: SnippetItem[]; note?: string } {
   const base = baseUrl.replace(/\/+$/, '');
   const key = apiKeyMasked || '<API_KEY>';
@@ -1212,7 +1300,7 @@ ${spec.authHeader
   -d '${spec.body}'`;
 
   const python = `from openai import OpenAI
-${protocol === 'openai' ? '' : '# 该 SDK 走 OpenAI 兼容协议，非 OpenAI 原生端点请确认服务商支持\n'}client = OpenAI(
+${protocol === 'openai' ? '' : pick(lang, '# 该 SDK 走 OpenAI 兼容协议，非 OpenAI 原生端点请确认服务商支持\n', '# This SDK speaks the OpenAI-compatible protocol; for a non-native endpoint, confirm the provider supports it\n')}client = OpenAI(
     base_url="${base}",
     api_key="${key}",
 )
@@ -1245,22 +1333,22 @@ console.log(data);`;
   const agentConfigs: SnippetItem[] = [
     {
       id: 'openai-compatible',
-      label: 'OpenAI 兼容客户端',
-      code: `# 任意兼容 OpenAI 协议的工具（Continue / Cline / Roo 等）
+      label: pick(lang, 'OpenAI 兼容客户端', 'OpenAI-compatible client'),
+      code: `${pick(lang, '# 任意兼容 OpenAI 协议的工具（Continue / Cline / Roo 等）', '# Any tool that speaks the OpenAI protocol (Continue / Cline / Roo, ...)')}
 OPENAI_BASE_URL=${base}
 OPENAI_API_KEY=${key}
 OPENAI_MODEL=${model}`,
     },
     {
       id: 'claude-code',
-      label: 'Claude Code (Anthropic 兼容)',
+      label: pick(lang, 'Claude Code (Anthropic 兼容)', 'Claude Code (Anthropic-compatible)'),
       code: `export ANTHROPIC_BASE_URL=${base}
 export ANTHROPIC_AUTH_TOKEN=${key}
 export ANTHROPIC_MODEL=${model}`,
     },
     {
       id: 'env',
-      label: '.env 通用',
+      label: pick(lang, '.env 通用', 'Generic .env'),
       code: `API_BASE_URL=${base}
 API_KEY=${key}
 API_MODEL=${model}`,
@@ -1274,12 +1362,16 @@ API_MODEL=${model}`,
       { id: 'node', label: 'Node.js', code: node },
     ],
     agent_configs: agentConfigs,
-    note: `以上模板按 ${protocol} 协议生成，已省略无关参数；把 ${key} 换成完整密钥即可调用。`,
+    note: pick(
+      lang,
+      `以上模板按 ${protocol} 协议生成，已省略无关参数；把 ${key} 换成完整密钥即可调用。`,
+      `Templates above are generated for the ${protocol} protocol with irrelevant parameters omitted. Replace ${key} with your full key and you are ready to call.`
+    ),
   };
 }
 
 /** 把检测报告序列化成一个自包含、可离线打开的 HTML 文档 */
-function buildStandaloneReportHtml(report: DetectionReport): string {
+function buildStandaloneReportHtml(report: DetectionReport, lang: Lang): string {
   const esc = (s: unknown): string =>
     String(s ?? '').replace(/[&<>"']/g, (c) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string),
@@ -1293,9 +1385,9 @@ function buildStandaloneReportHtml(report: DetectionReport): string {
       return `      <tr>
         <td class="mono">${esc(m.model)}</td>
         <td><span class="grade" style="color:${color};border-color:${color}">${esc(m.grade)}</span></td>
-        <td>${m.chatOk ? '通过' : '失败'}</td>
+        <td>${m.chatOk ? pick(lang, '通过', 'pass') : pick(lang, '失败', 'fail')}</td>
         <td class="mono">${esc(m.chatLatencyMs ?? '-')} ms</td>
-        <td>${m.sseOk ? '通过' : '失败'}</td>
+        <td>${m.sseOk ? pick(lang, '通过', 'pass') : pick(lang, '失败', 'fail')}</td>
         <td class="mono">${esc(m.firstByteMs ?? '-')} ms</td>
         <td>${esc(m.chunks ?? '-')}</td>
       </tr>`;
@@ -1303,10 +1395,10 @@ function buildStandaloneReportHtml(report: DetectionReport): string {
     .join('\n');
 
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="${lang === 'zh' ? 'zh-CN' : 'en'}">
 <head>
 <meta charset="utf-8">
-<title>API 健康检测报告 — ${esc(report.baseUrl)}</title>
+<title>${pick(lang, 'API 健康检测报告', 'API health check report')} — ${esc(report.baseUrl)}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root { color-scheme: light; }
@@ -1334,26 +1426,34 @@ function buildStandaloneReportHtml(report: DetectionReport): string {
 </head>
 <body>
 <main>
-  <h1>API 健康检测报告</h1>
-  <p class="sub">由 ZGo API Doctor 生成 · 浏览器直连探测，API Key 未经过任何服务器</p>
+  <h1>${pick(lang, 'API 健康检测报告', 'API health check report')}</h1>
+  <p class="sub">${pick(
+    lang,
+    '由 ZGo API Doctor 生成 · 浏览器直连探测，API Key 未经过任何服务器',
+    'Generated by ZGo API Doctor · probed directly from the browser, the API key never touched any server'
+  )}</p>
 
   <div class="kv">
     <div><b>Base URL</b><span class="mono">${esc(report.baseUrl)}</span></div>
-    <div><b>健康评分</b><span>${esc(report.score)} / 100</span></div>
-    <div><b>模型数</b><span>${esc(report.modelCount)}</span></div>
+    <div><b>${pick(lang, '健康评分', 'Health score')}</b><span>${esc(report.score)} / 100</span></div>
+    <div><b>${pick(lang, '模型数', 'Models')}</b><span>${esc(report.modelCount)}</span></div>
     <div><b>API Key</b><span class="mono">${esc(report.apiKeyMasked || '—')}</span></div>
   </div>
 
   <table>
     <thead>
-      <tr><th>模型</th><th>等级</th><th>Chat</th><th>延迟</th><th>SSE</th><th>首字节</th><th>分片</th></tr>
+      <tr><th>${pick(lang, '模型', 'Model')}</th><th>${pick(lang, '等级', 'Grade')}</th><th>Chat</th><th>${pick(lang, '延迟', 'Latency')}</th><th>SSE</th><th>${pick(lang, '首字节', 'First byte')}</th><th>${pick(lang, '分片', 'Chunks')}</th></tr>
     </thead>
     <tbody>
 ${rows}
     </tbody>
   </table>
 
-  <footer>本报告为浏览器端一次性探测结果，仅反映生成时刻的状态，不代表服务商的长期可用性。</footer>
+  <footer>${pick(
+    lang,
+    '本报告为浏览器端一次性探测结果，仅反映生成时刻的状态，不代表服务商的长期可用性。',
+    'This report is a one-off probe result produced in the browser. It reflects the state at generation time only and says nothing about the provider\'s long-term availability.'
+  )}</footer>
 </main>
 </body>
 </html>`;

@@ -26,6 +26,7 @@ Paste a Base URL and an API key. The tool lists the models, sends one real chat 
 - [Why you need it](#why-you-need-it)
 - [Features](#features)
 - [Getting started](#getting-started)
+- [Languages](#languages)
 - [How it works](#how-it-works)
 - [Scoring](#scoring)
 - [Supported protocols](#supported-protocols)
@@ -55,6 +56,7 @@ This tool turns "does the endpoint work" into something quantifiable, screenshot
 | **Shareable report** | The report is encoded into the URL hash — no server needed (`#/report?d=...`) |
 | **Export** | One click to export a self-contained HTML report that opens offline |
 | **Integration templates** | Generates cURL / Python / Node snippets plus common agent-tool configs per protocol |
+| **English and Chinese** | Full UI in both languages, switchable in the header and remembered in `localStorage` |
 
 ## Getting started
 
@@ -80,6 +82,25 @@ npm run lint        # eslint
 ```
 
 > This is a **pure static frontend**: no backend, no database, no accounts. Drop `dist/` on any static host (Vercel / Netlify / Nginx / object storage) and it runs.
+
+## Languages
+
+The UI ships in English and Simplified Chinese. A `中文 / EN` switch sits in the header; the choice is stored in `localStorage` under `zgo.lang`, and a first-time visitor gets whatever their browser language suggests (non-Chinese → English).
+
+Translation is **inline, not dictionary-based** — every string carries both versions next to each other:
+
+```tsx
+// React components: t(zh, en) from useI18n()
+{t('开始检测', 'Run a check')}
+
+// Non-React code (probe engine, report export): same idea, module-level helper
+import { t } from './i18n';
+t('API Key 长度不足', 'API key is too short')
+```
+
+Why not a key-per-string dictionary: with several hundred strings a separate catalogue always drifts (you edit the copy, forget the key, and it silently falls back). Inline pairs make an untranslated string obvious in review, and they survive the case where JSX splits one sentence across `<code>` / `<strong>` tags.
+
+To add a third language: extend `Lang` and `LANGS` in [`src/lib/i18n.tsx`](./src/lib/i18n.tsx), then widen `pick()` — the whole UI follows, because every component reads from the provider.
 
 ## How it works
 

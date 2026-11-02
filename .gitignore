@@ -26,3 +26,6 @@ dist-ssr
 *.tsbuildinfo
 # Vite 配置热更新产生的临时文件
 vite.config.ts.timestamp-*
+
+# local build output used for packaging releases
+tmp_build

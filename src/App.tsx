@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { AuroraBackground } from './components/AuroraBackground';
 import { ParticleBackground } from './components/ParticleBackground';
@@ -18,11 +18,14 @@ import { IntegrationPage } from './pages/IntegrationPage';
 import { ShareReport, ShareReportEmpty } from './components/ShareReport';
 import { useRouter, readShareToken } from './router';
 import { decodeShareToken } from './lib/share';
+import { I18nProvider, useI18n } from './lib/i18n';
+import { applyDocumentMeta } from './lib/meta';
 import type { DetectionReport } from './types';
 import { ArrowRight } from 'lucide-react';
 
 function HomePage() {
   const { navigate } = useRouter();
+  const { t } = useI18n();
 
   const handleStartClick = useCallback(() => {
     navigate('detect');
@@ -38,11 +41,14 @@ function HomePage() {
       <section className="relative py-20 lg:py-28" style={{ zIndex: 1 }}>
         <div className="max-w-3xl mx-auto px-5 sm:px-6 lg:px-8 text-center">
           <button onClick={handleStartClick} className="btn-primary group text-base px-10 py-4">
-            <span>开始检测</span>
+            <span>{t('开始检测', 'Run a check')}</span>
             <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
           </button>
           <p className="mt-5 text-ink-300 text-sm">
-            进入检测页，选择协议规则（OpenAI / Anthropic / Gemini / Mistral / Cohere），填入接口地址与 API Key 即可开始。
+            {t(
+              '进入检测页，选择协议规则（OpenAI / Anthropic / Gemini / Mistral / Cohere），填入接口地址与 API Key 即可开始。',
+              'Open the check page, pick a protocol (OpenAI / Anthropic / Gemini / Mistral / Cohere), then enter your Base URL and API key.',
+            )}
           </p>
         </div>
       </section>
@@ -56,8 +62,14 @@ function ShareReportRoute() {
   return report ? <ShareReport report={report} /> : <ShareReportEmpty />;
 }
 
-function App() {
+function AppShell() {
   const { route, navigate } = useRouter();
+  const { lang } = useI18n();
+
+  // 标签页标题与描述跟着语言走（index.html 里那份是英文静态兜底）
+  useEffect(() => {
+    applyDocumentMeta(lang);
+  }, [lang]);
 
   const renderPage = () => {
     switch (route) {
@@ -92,6 +104,14 @@ function App() {
         <Footer />
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <I18nProvider>
+      <AppShell />
+    </I18nProvider>
   );
 }
 

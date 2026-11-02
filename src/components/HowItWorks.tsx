@@ -1,5 +1,6 @@
 import { STAGES } from '../data';
 import type { StageId } from '../types';
+import { useI18n } from '../lib/i18n';
 import {
   Wifi,
   KeyRound,
@@ -23,6 +24,8 @@ const STAGE_ICONS: Record<StageId, typeof Wifi> = {
 };
 
 export function HowItWorks() {
+  const { t } = useI18n();
+
   return (
     <section id="how-it-works" className="relative py-20 lg:py-28 overflow-hidden" style={{ zIndex: 1 }}>
       <div className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8">
@@ -31,10 +34,13 @@ export function HowItWorks() {
             <span className="label-mono">How It Works</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-bold text-ink-50 tracking-tight">
-            两段式检测流程
+            {t('两段式检测流程', 'Two-phase check')}
           </h2>
           <p className="mt-4 text-ink-300 leading-relaxed">
-            先连接目标服务并拉取模型清单，再对每个模型分别做 Chat 与 SSE 流式探测，各步骤的耗时与判定汇聚为完整健康报告。
+            {t(
+              '先连接目标服务并拉取模型清单，再对每个模型分别做 Chat 与 SSE 流式探测，各步骤的耗时与判定汇聚为完整健康报告。',
+              'First reach the target service and pull its model list; then probe each model with a normal chat request and an SSE streaming one. The timings and verdicts from every step roll up into one health report.',
+            )}
           </p>
         </div>
 
@@ -53,9 +59,11 @@ export function HowItWorks() {
                         {idx + 1}
                       </span>
                     </div>
-                    <h3 className="text-sm font-semibold text-ink-50 mb-1.5">{stage.label}</h3>
+                    <h3 className="text-sm font-semibold text-ink-50 mb-1.5">
+                      {t(stage.label, stage.labelEn ?? stage.label)}
+                    </h3>
                     <p className="text-xs text-ink-400 leading-relaxed font-mono">
-                      {stage.description}
+                      {t(stage.description, stage.descriptionEn ?? stage.description)}
                     </p>
                   </div>
                 </div>

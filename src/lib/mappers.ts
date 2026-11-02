@@ -5,8 +5,9 @@ import type {
   LatencyBreakdown,
 } from '../types';
 import type { ProbeSummary, ProbeResult, DiscoveredModel } from './api';
+import { t } from './i18n';
 
-/** 把 Gateway 返回的探测结果 results[] 映射为前端报告模型 */
+/** Map the raw probe results[] into the model rows used by the report */
 export function toProbedResults(results: ProbeResult[]): ProbedModelResult[] {
   return results.map((item) => {
     const chat = item.chat || {};
@@ -28,7 +29,7 @@ export function toProbedResults(results: ProbeResult[]): ProbedModelResult[] {
   });
 }
 
-/** 汇总为报告（含评分/健康统计） */
+/** Aggregate into a report (score + health counts) */
 export function toReport(
   summary: ProbeSummary,
   baseUrl: string,
@@ -52,7 +53,7 @@ export function toReport(
   };
 }
 
-/** 名称归一化：去掉 /v1 尾部的模型 id 展示名 */
+/** Display name: strip any trailing /v1 segment from a model id */
 export function modelName(id: string): string {
   if (!id) return '';
   const cleaned = id.replace(/\/v1(?:beta)?(\/|$)/i, '/').replace(/\/v1(?:beta)?$/i, '');
@@ -71,11 +72,11 @@ export function monitorName(baseUrl: string): string {
 }
 
 export function providerOf(id: string): string {
-  if (id.includes('/')) return id.split('/')[0] || '自定义';
+  if (id.includes('/')) return id.split('/')[0] || t('自定义', 'Custom');
   return 'OpenAI';
 }
 
-/** 发现结果去重 + 转前端选项 */
+/** Deduplicate discovery results and turn them into UI options */
 export function discoveredToOptions(models: DiscoveredModel[]): { id: string; name: string; label: string; provider: string }[] {
   const seen = new Set<string>();
   const out: { id: string; name: string; label: string; provider: string }[] = [];
@@ -92,7 +93,7 @@ export function discoveredToOptions(models: DiscoveredModel[]): { id: string; na
   return out;
 }
 
-/** 把单个模型的探测证据压成首页/摘要用的 DetectionResult（延迟分解由 chat/stream 推导） */
+/** Compress one model's evidence into the DetectionResult used by the summary (latency derived from chat/stream) */
 export function probeResultToDetection(r: ProbedModelResult): DetectionResult {
   const firstByte = r.firstByteMs ?? r.chatLatencyMs;
   const streamDuration = Math.max(0, (r.chunks || 1) * (r.chatLatencyMs || 0) * 0.3 + firstByte);
@@ -108,28 +109,57 @@ export function probeResultToDetection(r: ProbedModelResult): DetectionResult {
 
   const safetyChecks = [
     {
-      name: 'Chat 通路',
+      name: t('Chat 通路', 'Chat path'),
       status: (r.chatOk ? 'pass' : 'fail') as 'pass' | 'fail' | 'warn',
-      detail: r.chatOk ? `非流式请求成功 · ${r.chatLatencyMs}ms` : (r.errorMessage || '请求失败'),
+      detail: r.chatOk
+        ? t(`非流式请求成功 · ${r.chatLatencyMs}ms`, `Buffered request OK · ${r.chatLatencyMs}ms`)
+        : r.errorMessage || t('请求失败', 'Request failed'),
     },
     {
-      name: 'SSE 流式通路',
+      name: t('SSE 流式通路', 'SSE streaming path'),
       status: (r.sseOk ? 'pass' : r.chunks ? 'warn' : 'fail') as 'pass' | 'fail' | 'warn',
-      detail: r.sseOk ? `流式请求成功 · ${r.chunks} chunks` : (r.chunks ? '流式未完整结束' : '流式请求失败'),
+      detail: r.sseOk
+        ? t(`流式请求成功 · ${r.chunks} chunks`, `Streaming request OK · ${r.chunks} chunks`)
+        : r.chunks
+        ? t('流式未完整结束', 'Stream ended prematurely')
+        : t('流式请求失败', 'Streaming request failed'),
     },
   ];
 
   const issues = [];
   if (r.status === 'down') {
-    issues.push({ level: 'critical' as const, title: '模型探测失败', detail: r.errorMessage || '对话请求失败', metric: r.errorCode || 'down' });
+    issues.push({
+      level: 'critical' as const,
+      title: t('模型探测失败', 'Model probe failed'),
+      detail: r.errorMessage || t('对话请求失败', 'The chat request failed'),
+      metric: r.errorCode || 'down',
+    });
   } else if (r.status === 'degraded') {
-    issues.push({ level: 'warning' as const, title: '部分通路降级', detail: 'Chat 或 SSE 未完全通过', metric: r.grade });
+    issues.push({
+      level: 'warning' as const,
+      title: t('部分通路降级', 'Partially degraded'),
+      detail: t('Chat 或 SSE 未完全通过', 'Chat and/or SSE did not fully pass'),
+      metric: r.grade,
+    });
   }
   if (r.firstByteMs && r.firstByteMs > 800) {
-    issues.push({ level: 'warning' as const, title: '首字节延迟偏高', detail: `TTFT ${r.firstByteMs}ms 超过 P75 基准`, metric: `${r.firstByteMs}ms` });
+    issues.push({
+      level: 'warning' as const,
+      title: t('首字节延迟偏高', 'High time to first byte'),
+      detail: t(
+        `TTFT ${r.firstByteMs}ms 超过 P75 基准`,
+        `TTFT ${r.firstByteMs}ms is above the 75th percentile baseline`
+      ),
+      metric: `${r.firstByteMs}ms`,
+    });
   }
   if (issues.length === 0) {
-    issues.push({ level: 'healthy' as const, title: '通路状态良好', detail: 'Chat 与 SSE 均通过', metric: r.grade });
+    issues.push({
+      level: 'healthy' as const,
+      title: t('通路状态良好', 'All paths healthy'),
+      detail: t('Chat 与 SSE 均通过', 'Both Chat and SSE passed'),
+      metric: r.grade,
+    });
   }
 
   return {
@@ -147,7 +177,7 @@ export function probeResultToDetection(r: ProbedModelResult): DetectionResult {
     })),
     safetyChecks,
     issues,
-    responsePreview: r.chatPreview || '（无可用的响应预览）',
+    responsePreview: r.chatPreview || t('（无可用的响应预览）', '(no response preview available)'),
     tokensIn: 0,
     tokensOut: 0,
   };

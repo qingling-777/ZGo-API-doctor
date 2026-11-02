@@ -42,6 +42,12 @@ export const SHOW_HOSTED_LINK = false;
 export const BUSINESS_ENTITY = '示例科技有限公司';
 
 /**
+ * 经营主体的英文写法 —— 与 BUSINESS_ENTITY 一一对应，只用于英文界面的法律条款页。
+ * Fork 时请一并替换。
+ */
+export const BUSINESS_ENTITY_EN = 'Example Technology Co., Ltd.';
+
+/**
  * 客服邮箱。与 CONTACT_EMAIL 为同一邮箱，单独命名是为了在
  * 「问题反馈」「安全报告」等场景中语义更明确。
  */

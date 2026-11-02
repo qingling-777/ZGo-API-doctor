@@ -24,6 +24,9 @@ export interface StageInfo {
   id: StageId;
   label: string;
   description: string;
+  /** 英文字段：UI 用 `t(label, labelEn)` 取，缺省回落中文 */
+  labelEn?: string;
+  descriptionEn?: string;
 }
 
 export type IssueLevel = 'critical' | 'warning' | 'info' | 'healthy';

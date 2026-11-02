@@ -1,5 +1,6 @@
 import { PROTOCOLS, type Protocol } from '../lib/api';
 import { VendorLogo } from './VendorLogo';
+import { useI18n } from '../lib/i18n';
 
 interface ProtocolSelectProps {
   value: Protocol;
@@ -17,9 +18,10 @@ const TILE_BG: Record<Protocol, string> = {
 };
 
 export function ProtocolSelect({ value, onChange, disabled }: ProtocolSelectProps) {
+  const { t } = useI18n();
   return (
     <div>
-      <label className="label-mono block mb-3">接口协议规则</label>
+      <label className="label-mono block mb-3">{t('接口协议规则', 'PROTOCOL')}</label>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
         {PROTOCOLS.map((p) => {
           const isActive = value === p.id;

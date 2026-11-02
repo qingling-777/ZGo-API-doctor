@@ -1,11 +1,12 @@
-// ZGo API Doctor —— 浏览器直连探测（零信任模式）
+// ZGo API Doctor — direct-from-the-browser probing (zero-trust mode)
 // ============================================================
-// 这个文件是整个项目唯一必需的「引擎」：请求从**浏览器直接发往用户填的
-// Base URL**，API Key 只会出现在发往目标接口的请求头里，**不经过任何服务器**。
-// 这是打消「偷偷用 Key」疑虑的核心手段——用户在 DevTools → Network
-// 能亲眼看到请求只打到他自己的域名。
+// This file is the only "engine" the project needs: requests go from the
+// **browser straight to the Base URL the user typed**, and the API key only
+// ever appears in headers sent to that target — **it never touches any server**.
+// That is the whole point: the user can open DevTools -> Network and watch the
+// traffic go to their own host and nowhere else.
 //
-// 探测流程、评分规则、协议映射都是纯前端的，不依赖任何后端服务。
+// Probing, scoring and protocol mapping are all pure frontend — no backend.
 // ============================================================
 
 import type {
@@ -18,8 +19,9 @@ import type {
   ProbeResult,
   ProbeCheck,
 } from './api';
+import { t } from './i18n';
 
-// ---------------- 协议归一化 ----------------
+// ---------------- protocol normalisation ----------------
 export function normalizeProtocol(protocol: string): Protocol {
   const p = (protocol || 'openai').trim().toLowerCase();
   if (p === 'claude' || p === 'anthropic') return 'anthropic';
@@ -29,7 +31,7 @@ export function normalizeProtocol(protocol: string): Protocol {
   return 'openai';
 }
 
-// ---------------- 认证头 ----------------
+// ---------------- auth headers ----------------
 export function protocolHeaders(protocol: Protocol, apiKey: string): Record<string, string> {
   const h: Record<string, string> = { Accept: 'application/json' };
   const key = (apiKey || '').trim();
@@ -46,13 +48,13 @@ export function protocolHeaders(protocol: Protocol, apiKey: string): Record<stri
   return h;
 }
 
-// 探测用的归一化 Base URL（与后端 _doctor_models_url 一致：缺 /v1 则补）
+// Normalised Base URL for probing (appends /v1 when missing)
 export function modelsBaseUrl(baseUrl: string): string {
   const clean = (baseUrl || '').trim().replace(/\/+$/, '');
   return clean.endsWith('/v1') ? clean : clean + '/v1';
 }
 
-// 推导多个候选 /models 端点（与后端 _candidate_models_urls 一致）
+// Derive candidate /models endpoints, most specific first
 export function candidateModelsUrls(baseUrl: string, protocol: Protocol, apiKey: string): string[] {
   const raw = (baseUrl || '').trim().replace(/\/+$/, '');
   const p = normalizeProtocol(protocol);
@@ -85,7 +87,7 @@ export function candidateModelsUrls(baseUrl: string, protocol: Protocol, apiKey:
   return candidates;
 }
 
-// ---------------- 聊天端点 ----------------
+// ---------------- chat endpoint ----------------
 export function protocolChatUrl(base: string, protocol: Protocol, model: string): string {
   const p = normalizeProtocol(protocol);
   const b = (base || '').replace(/\/+$/, '');
@@ -153,7 +155,7 @@ function streamDoneFn(line: string, protocol: Protocol): boolean {
   return data === '[DONE]';
 }
 
-// ---------------- 小工具 ----------------
+// ---------------- helpers ----------------
 function now(): number {
   return performance.now();
 }
@@ -168,9 +170,10 @@ function probeError(code: string, message: string, latencyMs: number, statusCode
   return r;
 }
 
-// 直连探测必须自带超时：浏览器 fetch 默认永不超时，一旦目标挂住、或 SSE 流迟迟
-// 不结束，页面会永远停在「检测中」且没有任何报错。取值与后端 httpx 口径对齐：
-// 发现模型 8s（Timeout(8.0, connect=4.0)），Chat / SSE 探测 12s（Timeout(12.0, connect=4.0)）。
+// Direct probing must carry its own timeouts: fetch never times out by default, so a
+// hung endpoint (or an SSE stream that never ends) would leave the page spinning with
+// no error at all. Values mirror the original backend httpx settings:
+// discovery 8s (Timeout(8.0, connect=4.0)), Chat / SSE probes 12s (Timeout(12.0, connect=4.0)).
 const DISCOVER_TIMEOUT_MS = 8000;
 const PROBE_TIMEOUT_MS = 12000;
 
@@ -178,13 +181,20 @@ function isAbort(e: unknown): boolean {
   return e instanceof Error && (e.name === 'AbortError' || e.name === 'TimeoutError');
 }
 
-// ---------------- 发现模型（直连） ----------------
+// ---------------- model discovery (direct) ----------------
 export async function discoverDirect(baseUrl: string, apiKey: string, protocol: Protocol = 'openai', verifyKey: boolean = false): Promise<DiscoverResult> {
   const p = normalizeProtocol(protocol);
   const headers = protocolHeaders(p, apiKey);
   const candidates = candidateModelsUrls(baseUrl, p, apiKey);
   if (!candidates.length) {
-    return { ok: false, code: 'bad_url', message: '无法解析该 Base URL', endpoint: '', latency_ms: 0, models: [] };
+    return {
+      ok: false,
+      code: 'bad_url',
+      message: t('无法解析该 Base URL', 'Could not parse that Base URL'),
+      endpoint: '',
+      latency_ms: 0,
+      models: [],
+    };
   }
   const startAll = now();
   let fallback: [string, number] | null = null;
@@ -199,17 +209,23 @@ export async function discoverDirect(baseUrl: string, apiKey: string, protocol: 
         return {
           ok: false,
           code: 'timeout',
-          message: `模型列表请求超时（已连接但 ${DISCOVER_TIMEOUT_MS / 1000}s 未响应，或接口卡死）`,
+          message: t(
+            `模型列表请求超时（已连接但 ${DISCOVER_TIMEOUT_MS / 1000}s 未响应，或接口卡死）`,
+            `Model list request timed out — connected, but nothing came back in ${DISCOVER_TIMEOUT_MS / 1000}s (the endpoint may be hung)`
+          ),
           endpoint: modelsUrl,
           latency_ms: Math.round(now() - startAll),
           models: [],
         };
       }
-      // 浏览器区分不了 CORS 拦截与网络不可达，二者均抛 TypeError
+      // A CORS block and an unreachable host both surface as TypeError — the browser cannot tell them apart
       return {
         ok: false,
         code: 'cors_error',
-        message: '无法连接目标接口（可能是跨域 CORS 限制或网络不可达）。这是浏览器安全策略，不是接口本身的问题 —— 解决办法见 README 常见问题。',
+        message: t(
+          '无法连接目标接口（可能是跨域 CORS 限制或网络不可达）。这是浏览器安全策略，不是接口本身的问题 —— 解决办法见 README 常见问题。',
+          'Cannot reach the target endpoint — probably a CORS restriction or an unreachable host. This is a browser security policy, not a fault of the endpoint itself; see the FAQ in the README for workarounds.'
+        ),
         endpoint: modelsUrl,
         latency_ms: Math.round(now() - startAll),
         models: [],
@@ -218,24 +234,47 @@ export async function discoverDirect(baseUrl: string, apiKey: string, protocol: 
     const status = response.status;
     if (status === 404) {
       if (idx === candidates.length - 1 && !fallback) {
-        return { ok: false, code: 'http_error', message: '模型列表返回 HTTP 404，请确认该接口是否提供 /models 端点', endpoint: modelsUrl, status_code: 404, latency_ms: Math.round(now() - startAll), models: [] };
+        return {
+          ok: false,
+          code: 'http_error',
+          message: t(
+            '模型列表返回 HTTP 404，请确认该接口是否提供 /models 端点',
+            'The model list returned HTTP 404 — check that this endpoint actually exposes /models'
+          ),
+          endpoint: modelsUrl,
+          status_code: 404,
+          latency_ms: Math.round(now() - startAll),
+          models: [],
+        };
       }
       continue;
     }
     if (!fallback) fallback = [modelsUrl, status];
     const latency = Math.round(now() - started);
     if (status < 200 || status >= 300) {
-      let msg = `模型列表返回 HTTP ${status}`;
-      if (status === 401) msg = 'API Key 无效、已过期或未传入';
-      else if (status === 403) msg = 'API Key 缺少调用权限';
-      else if (status === 429) msg = '接口触发限流或额度不足';
+      let msg = t(`模型列表返回 HTTP ${status}`, `The model list returned HTTP ${status}`);
+      if (status === 401) {
+        msg = t('API Key 无效、已过期或未传入', 'API key is invalid, expired, or missing');
+      } else if (status === 403) {
+        msg = t('API Key 缺少调用权限', 'API key lacks permission to call this endpoint');
+      } else if (status === 429) {
+        msg = t('接口触发限流或额度不足', 'Rate limited or out of quota');
+      }
       return { ok: false, code: 'http_error', message: msg, endpoint: modelsUrl, status_code: status, latency_ms: latency, models: [] };
     }
     let payload: unknown;
     try {
       payload = await response.json();
     } catch {
-      return { ok: false, code: 'invalid_json', message: '模型列表不是有效 JSON', endpoint: modelsUrl, status_code: status, latency_ms: latency, models: [] };
+      return {
+        ok: false,
+        code: 'invalid_json',
+        message: t('模型列表不是有效 JSON', 'The model list is not valid JSON'),
+        endpoint: modelsUrl,
+        status_code: status,
+        latency_ms: latency,
+        models: [],
+      };
     }
     const rawModels = payload && typeof payload === 'object' ? (payload as any).data : [];
     const models: DiscoveredModel[] = [];
@@ -247,25 +286,59 @@ export async function discoverDirect(baseUrl: string, apiKey: string, protocol: 
       seen.add(mid);
       models.push({ id: mid, owned_by: (item && typeof item === 'object' && (item as any).owned_by) || 'unknown' });
     }
-    // 端点 200 但无模型：继续试下一个候选，避免 ok/model_count:0 误报
+    // 200 but no models: try the next candidate so we do not report ok with model_count 0
     if (!models.length) {
       if (idx === candidates.length - 1) {
-        return { ok: false, code: 'empty_models', message: '接口连接成功，但未返回任何可用模型（可能 Base URL 不完整，如缺少 /v1 或 /openai/v1）', endpoint: modelsUrl, status_code: status, latency_ms: latency, models: [] };
+        return {
+          ok: false,
+          code: 'empty_models',
+          message: t(
+            '接口连接成功，但未返回任何可用模型（可能 Base URL 不完整，如缺少 /v1 或 /openai/v1）',
+            'Connected successfully, but no usable models came back — the Base URL may be incomplete (missing /v1 or /openai/v1)'
+          ),
+          endpoint: modelsUrl,
+          status_code: status,
+          latency_ms: latency,
+          models: [],
+        };
       }
       continue;
     }
-    // 默认不校验 Key（verifyKey=false），让模型目录秒出；显式传 true 才发聊天冒烟
-    let keyAuth: KeyAuth = { status: 'unknown', detail: '尚未校验 API Key，点击「验证 Key」进行校验' };
+    // By default the key is not verified (verifyKey=false) so the catalogue appears instantly; pass true to run a chat smoke test
+    let keyAuth: KeyAuth = {
+      status: 'unknown',
+      detail: t('尚未校验 API Key，点击「验证 Key」进行校验', 'API key not verified yet — use “Verify key” to check it'),
+    };
     if (apiKey && apiKey.trim()) {
       if (verifyKey) {
         keyAuth = await keySmoke(modelsBaseUrl(baseUrl), apiKey, p, models[0].id);
       }
     } else {
-      keyAuth = { status: 'unknown', detail: '未提供 API Key，跳过有效性校验' };
+      keyAuth = {
+        status: 'unknown',
+        detail: t('未提供 API Key，跳过有效性校验', 'No API key supplied — skipping the validity check'),
+      };
     }
-    return { ok: true, code: 'ok', message: '模型列表获取成功', endpoint: modelsUrl, status_code: status, latency_ms: latency, model_count: models.length, models, key_auth: keyAuth };
+    return {
+      ok: true,
+      code: 'ok',
+      message: t('模型列表获取成功', 'Model list retrieved'),
+      endpoint: modelsUrl,
+      status_code: status,
+      latency_ms: latency,
+      model_count: models.length,
+      models,
+      key_auth: keyAuth,
+    };
   }
-  return { ok: false, code: 'not_found', message: '未找到可用的模型列表端点', endpoint: candidates[candidates.length - 1] || '', latency_ms: Math.round(now() - startAll), models: [] };
+  return {
+    ok: false,
+    code: 'not_found',
+    message: t('未找到可用的模型列表端点', 'No working model-list endpoint found'),
+    endpoint: candidates[candidates.length - 1] || '',
+    latency_ms: Math.round(now() - startAll),
+    models: [],
+  };
 }
 
 async function keySmoke(base: string, apiKey: string, protocol: Protocol, model: string): Promise<KeyAuth> {
@@ -278,25 +351,89 @@ async function keySmoke(base: string, apiKey: string, protocol: Protocol, model:
   try {
     response = await fetch(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
   } catch (e) {
-    if (isAbort(e)) return { status: 'unknown', detail: `聊天冒烟超时（${PROBE_TIMEOUT_MS / 1000}s 未响应）`, latency_ms: Math.round(now() - started) };
-    return { status: 'unknown', detail: '聊天冒烟无法连接', latency_ms: Math.round(now() - started) };
+    if (isAbort(e)) {
+      return {
+        status: 'unknown',
+        detail: t(
+          `聊天冒烟超时（${PROBE_TIMEOUT_MS / 1000}s 未响应）`,
+          `Chat smoke test timed out (no response in ${PROBE_TIMEOUT_MS / 1000}s)`
+        ),
+        latency_ms: Math.round(now() - started),
+      };
+    }
+    return {
+      status: 'unknown',
+      detail: t('聊天冒烟无法连接', 'Chat smoke test could not connect'),
+      latency_ms: Math.round(now() - started),
+    };
   }
   const latency = Math.round(now() - started);
-  if (response.status === 401) return { status: 'invalid', detail: 'API Key 无效、已过期或未传入', latency_ms: latency, status_code: 401 };
-  if (response.status === 403) return { status: 'invalid', detail: 'API Key 没有调用模型的权限', latency_ms: latency, status_code: 403 };
-  if (response.status > 401 && response.status < 500) return { status: 'reachable', detail: `聊天冒烟返回 HTTP ${response.status}（key 可用，模型可能不存在）`, latency_ms: latency, status_code: response.status };
-  if (response.status >= 500) return { status: 'reachable', detail: `聊天冒烟返回 HTTP ${response.status}（上游瞬时错误，非 key 问题）`, latency_ms: latency, status_code: response.status };
+  if (response.status === 401) {
+    return {
+      status: 'invalid',
+      detail: t('API Key 无效、已过期或未传入', 'API key is invalid, expired, or missing'),
+      latency_ms: latency,
+      status_code: 401,
+    };
+  }
+  if (response.status === 403) {
+    return {
+      status: 'invalid',
+      detail: t('API Key 没有调用模型的权限', 'API key is not allowed to call this model'),
+      latency_ms: latency,
+      status_code: 403,
+    };
+  }
+  if (response.status > 401 && response.status < 500) {
+    return {
+      status: 'reachable',
+      detail: t(
+        `聊天冒烟返回 HTTP ${response.status}（key 可用，模型可能不存在）`,
+        `Chat smoke test returned HTTP ${response.status} (key works; the model may not exist)`
+      ),
+      latency_ms: latency,
+      status_code: response.status,
+    };
+  }
+  if (response.status >= 500) {
+    return {
+      status: 'reachable',
+      detail: t(
+        `聊天冒烟返回 HTTP ${response.status}（上游瞬时错误，非 key 问题）`,
+        `Chat smoke test returned HTTP ${response.status} (transient upstream error, not a key problem)`
+      ),
+      latency_ms: latency,
+      status_code: response.status,
+    };
+  }
   try {
     const payload = await response.json();
     const content = extractContent(payload, p);
-    if (typeof content === 'string') return { status: 'valid', detail: 'API Key 有效，模型可正常调用', latency_ms: latency, status_code: response.status };
-    return { status: 'reachable', detail: '聊天冒烟返回 2xx 但无正文（key 可用）', latency_ms: latency, status_code: response.status };
+    if (typeof content === 'string') {
+      return {
+        status: 'valid',
+        detail: t('API Key 有效，模型可正常调用', 'API key is valid and the model responds'),
+        latency_ms: latency,
+        status_code: response.status,
+      };
+    }
+    return {
+      status: 'reachable',
+      detail: t('聊天冒烟返回 2xx 但无正文（key 可用）', 'Chat smoke test returned 2xx but no content (key works)'),
+      latency_ms: latency,
+      status_code: response.status,
+    };
   } catch {
-    return { status: 'reachable', detail: '聊天冒烟返回非 JSON（key 可用）', latency_ms: latency, status_code: response.status };
+    return {
+      status: 'reachable',
+      detail: t('聊天冒烟返回非 JSON（key 可用）', 'Chat smoke test returned non-JSON (key works)'),
+      latency_ms: latency,
+      status_code: response.status,
+    };
   }
 }
 
-// ---------------- 受控探测（直连） ----------------
+// ---------------- controlled probing (direct) ----------------
 async function chatProbe(base: string, headers: Record<string, string>, model: string, protocol: Protocol): Promise<ProbeCheck> {
   const p = normalizeProtocol(protocol);
   const url = protocolChatUrl(base, p, model);
@@ -306,24 +443,61 @@ async function chatProbe(base: string, headers: Record<string, string>, model: s
   try {
     response = await fetch(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
   } catch (e) {
-    if (isAbort(e)) return { ok: false, code: 'timeout', message: `非流式请求超时（${PROBE_TIMEOUT_MS / 1000}s 未返回完整响应）`, latency_ms: Math.round(now() - started) };
-    return { ok: false, code: 'network_error', message: '非流式请求无法连接', latency_ms: Math.round(now() - started), detail: (e as Error)?.name };
+    if (isAbort(e)) {
+      return {
+        ok: false,
+        code: 'timeout',
+        message: t(
+          `非流式请求超时（${PROBE_TIMEOUT_MS / 1000}s 未返回完整响应）`,
+          `Buffered request timed out (no complete response within ${PROBE_TIMEOUT_MS / 1000}s)`
+        ),
+        latency_ms: Math.round(now() - started),
+      };
+    }
+    return {
+      ok: false,
+      code: 'network_error',
+      message: t('非流式请求无法连接', 'Buffered request could not connect'),
+      latency_ms: Math.round(now() - started),
+      detail: (e as Error)?.name,
+    };
   }
   const latency = Math.round(now() - started);
-  if (response.status >= 400) return probeError('http_error', `非流式请求返回 HTTP ${response.status}`, latency, response.status);
+  if (response.status >= 400) {
+    return probeError(
+      'http_error',
+      t(`非流式请求返回 HTTP ${response.status}`, `Buffered request returned HTTP ${response.status}`),
+      latency,
+      response.status
+    );
+  }
   let payload: any;
   try {
     payload = await response.json();
   } catch {
-    return { ok: false, code: 'invalid_json', message: '非流式响应不是有效 JSON', latency_ms: latency, status_code: response.status };
+    return {
+      ok: false,
+      code: 'invalid_json',
+      message: t('非流式响应不是有效 JSON', 'Buffered response is not valid JSON'),
+      latency_ms: latency,
+      status_code: response.status,
+    };
   }
   const content = extractContent(payload, p);
-  if (typeof content !== 'string') return { ok: false, code: 'invalid_response', message: '响应缺少正文内容', latency_ms: latency, status_code: response.status };
+  if (typeof content !== 'string') {
+    return {
+      ok: false,
+      code: 'invalid_response',
+      message: t('响应缺少正文内容', 'Response is missing the message content'),
+      latency_ms: latency,
+      status_code: response.status,
+    };
+  }
   const usage = payload && typeof payload === 'object' ? payload.usage : null;
   return {
     ok: true,
     code: 'ok',
-    message: '非流式响应正常',
+    message: t('非流式响应正常', 'Buffered response OK'),
     latency_ms: latency,
     status_code: response.status,
     content_preview: content.slice(0, 80),
@@ -343,14 +517,28 @@ async function streamProbe(base: string, headers: Record<string, string>, model:
   let timedOut = false;
   try {
     const response = await fetch(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
-    if (response.status >= 400) return probeError('http_error', `流式请求返回 HTTP ${response.status}`, Math.round(now() - started), response.status);
-    if (!response.body) return { ok: false, code: 'incomplete_stream', message: '流式响应无正文', latency_ms: Math.round(now() - started) };
+    if (response.status >= 400) {
+      return probeError(
+        'http_error',
+        t(`流式请求返回 HTTP ${response.status}`, `Streaming request returned HTTP ${response.status}`),
+        Math.round(now() - started),
+        response.status
+      );
+    }
+    if (!response.body) {
+      return {
+        ok: false,
+        code: 'incomplete_stream',
+        message: t('流式响应无正文', 'Streaming response has no body'),
+        latency_ms: Math.round(now() - started),
+      };
+    }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    // 跨域流式：用 fetch + ReadableStream 逐行解析 SSE（比 EventSource 支持 POST 与自定义头）
+    // Streaming across origins: fetch + ReadableStream, parsing SSE line by line (EventSource cannot do POST or custom headers)
     while (true) {
-      // 墙钟兜底：即使 signal 未被浏览器及时中断 body，也按时跳出，避免永久卡住
+      // Wall-clock fallback: bail out on time even if the browser does not tear the body down, so the page never hangs forever
       if (now() - started > PROBE_TIMEOUT_MS) { timedOut = true; break; }
       const { value, done: streamDone } = await reader.read();
       if (streamDone) break;
@@ -371,13 +559,60 @@ async function streamProbe(base: string, headers: Record<string, string>, model:
       }
     }
   } catch (e) {
-    if (isAbort(e)) return { ok: false, code: 'timeout', message: `流式请求超时（${PROBE_TIMEOUT_MS / 1000}s 未完成）`, latency_ms: Math.round(now() - started), first_byte_ms: firstByte, chunks };
-    return { ok: false, code: 'network_error', message: '流式请求无法连接', latency_ms: Math.round(now() - started), detail: (e as Error)?.name };
+    if (isAbort(e)) {
+      return {
+        ok: false,
+        code: 'timeout',
+        message: t(
+          `流式请求超时（${PROBE_TIMEOUT_MS / 1000}s 未完成）`,
+          `Streaming request timed out (not finished within ${PROBE_TIMEOUT_MS / 1000}s)`
+        ),
+        latency_ms: Math.round(now() - started),
+        first_byte_ms: firstByte,
+        chunks,
+      };
+    }
+    return {
+      ok: false,
+      code: 'network_error',
+      message: t('流式请求无法连接', 'Streaming request could not connect'),
+      latency_ms: Math.round(now() - started),
+      detail: (e as Error)?.name,
+    };
   }
   const latency = Math.round(now() - started);
-  if (timedOut) return { ok: false, code: 'timeout', message: `流式响应超时（${PROBE_TIMEOUT_MS / 1000}s 未收到结束标记）`, latency_ms: latency, first_byte_ms: firstByte, chunks };
-  if (!done) return { ok: false, code: 'incomplete_stream', message: '流式响应未收到结束标记', latency_ms: latency, first_byte_ms: firstByte, chunks };
-  return { ok: true, code: 'ok', message: '流式响应正常', latency_ms: latency, first_byte_ms: firstByte, chunks, done: true };
+  if (timedOut) {
+    return {
+      ok: false,
+      code: 'timeout',
+      message: t(
+        `流式响应超时（${PROBE_TIMEOUT_MS / 1000}s 未收到结束标记）`,
+        `Streaming response timed out (no end marker within ${PROBE_TIMEOUT_MS / 1000}s)`
+      ),
+      latency_ms: latency,
+      first_byte_ms: firstByte,
+      chunks,
+    };
+  }
+  if (!done) {
+    return {
+      ok: false,
+      code: 'incomplete_stream',
+      message: t('流式响应未收到结束标记', 'Streaming response never sent the end marker'),
+      latency_ms: latency,
+      first_byte_ms: firstByte,
+      chunks,
+    };
+  }
+  return {
+    ok: true,
+    code: 'ok',
+    message: t('流式响应正常', 'Streaming response OK'),
+    latency_ms: latency,
+    first_byte_ms: firstByte,
+    chunks,
+    done: true,
+  };
 }
 
 function summarize(results: ProbeResult[], base: string): ProbeSummary {
@@ -396,8 +631,12 @@ export async function probeDirect(req: ProbeRequest): Promise<ProbeSummary> {
   const headers = protocolHeaders(protocol, req.api_key);
   const results: ProbeResult[] = [];
   for (const model of models) {
-    const chat = req.chat_enabled ? await chatProbe(base, headers, model, protocol) : notRun('未选择 Chat 检测');
-    const stream = req.sse_enabled ? await streamProbe(base, headers, model, protocol) : notRun('未选择 SSE 检测');
+    const chat = req.chat_enabled
+      ? await chatProbe(base, headers, model, protocol)
+      : notRun(t('未选择 Chat 检测', 'Chat probe not selected'));
+    const stream = req.sse_enabled
+      ? await streamProbe(base, headers, model, protocol)
+      : notRun(t('未选择 SSE 检测', 'SSE probe not selected'));
     const checks = [chat, stream].filter((c) => c.code !== 'not_run');
     const successful = checks.filter((c) => c.ok).length;
     let status: ProbeResult['status'];
@@ -417,7 +656,7 @@ export async function probeDirect(req: ProbeRequest): Promise<ProbeSummary> {
   return summarize(results, base);
 }
 
-// ---------------- 预检：将发送的请求（#4 透明度） ----------------
+// ---------------- preflight: the requests that will be sent ----------------
 export interface PreflightRequest {
   kind: 'GET /models' | 'Chat' | 'SSE';
   method: 'GET' | 'POST';
@@ -442,7 +681,7 @@ function maskUrlKey(url: string): string {
   return url.replace(/([?&]key=)[^&]+/i, '$1***');
 }
 
-/** 生成「即将发送」的请求清单（Key 一律脱敏），用于预检预览面板。 */
+/** Build the list of requests that are about to be sent (keys always masked) for the preflight panel. */
 export function buildPreflight(
   baseUrl: string,
   apiKey: string,

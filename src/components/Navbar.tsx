@@ -1,8 +1,22 @@
 import { useState, useEffect } from 'react';
 import { Logo } from './Logo';
+import { LangSwitch } from './LangSwitch';
 import { Menu, X } from 'lucide-react';
 import { ROUTES, type Route } from '../router';
 import { GITHUB_URL } from '../lib/site';
+import { useI18n } from '../lib/i18n';
+
+/** 导航项英文名。键与 router.ts 的 Route id 对齐 */
+const NAV_EN: Record<Route, string> = {
+  home: 'Home',
+  detect: 'Check',
+  integration: 'Integrate',
+  changelog: 'Changelog',
+  about: 'About',
+  privacy: 'Privacy',
+  terms: 'Terms',
+  report: 'Report',
+};
 
 function GitHubMark({ size = 18 }: { size?: number }) {
   return (
@@ -20,6 +34,7 @@ interface NavbarProps {
 export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -33,6 +48,7 @@ export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
   };
 
   const navLinks = ROUTES;
+  const githubLabel = t('GitHub 开源仓库', 'GitHub repository');
 
   return (
     <header
@@ -61,7 +77,7 @@ export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
                       : 'text-ink-300 hover:text-ink-50 hover:bg-ink-800/30'
                   }`}
                 >
-                  {link.label}
+                  {t(link.label, NAV_EN[link.id] ?? link.label)}
                   {isActive && (
                     <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-gradient-to-r from-primary-400 to-accent-400" />
                   )}
@@ -71,12 +87,13 @@ export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
           </nav>
 
           <div className="hidden lg:flex items-center gap-2">
+            <LangSwitch />
             <a
               href={GITHUB_URL}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="GitHub 开源仓库"
-              title="查看开源仓库"
+              aria-label={githubLabel}
+              title={t('查看开源仓库', 'View the source on GitHub')}
               className="p-2 text-ink-300 hover:text-ink-50 hover:bg-ink-800/30 rounded-lg transition-colors"
             >
               <GitHubMark size={18} />
@@ -85,16 +102,17 @@ export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
               onClick={() => handleNav('detect')}
               className="btn-primary text-sm"
             >
-              开始检测
+              {t('开始检测', 'Run a check')}
             </button>
           </div>
 
           <div className="lg:hidden flex items-center gap-1">
+            <LangSwitch compact />
             <a
               href={GITHUB_URL}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="GitHub 开源仓库"
+              aria-label={githubLabel}
               className="p-2 text-ink-300 hover:text-ink-50 transition-colors"
             >
               <GitHubMark size={20} />
@@ -102,7 +120,7 @@ export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
             <button
               className="p-2 text-ink-200 hover:text-ink-50 transition-colors"
               onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label="菜单"
+              aria-label={t('菜单', 'Menu')}
             >
               {mobileOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
@@ -125,7 +143,7 @@ export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
                       : 'text-ink-200 hover:text-ink-50 hover:bg-ink-800/50'
                   }`}
                 >
-                  {link.label}
+                  {t(link.label, NAV_EN[link.id] ?? link.label)}
                 </button>
               );
             })}
@@ -134,7 +152,7 @@ export function Navbar({ currentRoute, onNavigate }: NavbarProps) {
                 onClick={() => handleNav('detect')}
                 className="w-full px-3 py-2.5 text-sm font-medium rounded-lg text-left text-primary-300 hover:bg-ink-800/50 transition-colors"
               >
-                开始检测
+                {t('开始检测', 'Run a check')}
               </button>
             </div>
           </nav>

@@ -1,5 +1,6 @@
 import type { StageId } from '../types';
 import { STAGES } from '../data';
+import { useI18n } from '../lib/i18n';
 import {
   Wifi,
   KeyRound,
@@ -32,6 +33,7 @@ interface StageTrackProps {
 export function StageTrack({ currentStage, stageProgress }: StageTrackProps) {
   const activeIndex = STAGES.findIndex((s) => s.id === currentStage);
   const isComplete = currentStage === 'complete';
+  const { t } = useI18n();
 
   return (
     <div className="glass-strong p-5 sm:p-6">
@@ -109,9 +111,9 @@ export function StageTrack({ currentStage, stageProgress }: StageTrackProps) {
               <Check size={18} className="text-success-400" strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-sm font-semibold text-success-400">诊断完成</p>
+              <p className="text-sm font-semibold text-success-400">{t('诊断完成', 'Check complete')}</p>
               <p className="text-xs text-ink-300 mt-0.5">
-                所有检测阶段已完成，查看下方详细报告
+                {t('所有检测阶段已完成，查看下方详细报告', 'All stages finished — the full report is below')}
               </p>
             </div>
           </div>
@@ -123,10 +125,13 @@ export function StageTrack({ currentStage, stageProgress }: StageTrackProps) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-ink-50">
-                {STAGES[activeIndex].label}
+                {t(STAGES[activeIndex].label, STAGES[activeIndex].labelEn ?? STAGES[activeIndex].label)}
               </p>
               <p className="text-xs text-ink-300 mt-0.5 font-mono">
-                {STAGES[activeIndex].description}
+                {t(
+                  STAGES[activeIndex].description,
+                  STAGES[activeIndex].descriptionEn ?? STAGES[activeIndex].description,
+                )}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -147,9 +152,9 @@ export function StageTrack({ currentStage, stageProgress }: StageTrackProps) {
               <Wifi size={16} className="text-ink-400" />
             </div>
             <div>
-              <p className="text-sm font-medium text-ink-200">等待开始检测</p>
+              <p className="text-sm font-medium text-ink-200">{t('等待开始检测', 'Waiting to start')}</p>
               <p className="text-xs text-ink-400 mt-0.5">
-                选择模型并输入 API Key 以启动诊断流程
+                {t('选择模型并输入 API Key 以启动诊断流程', 'Pick a model and enter your API key to start')}
               </p>
             </div>
           </div>
