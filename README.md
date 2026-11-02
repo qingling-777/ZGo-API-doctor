@@ -1,10 +1,20 @@
 # ZGo API Doctor
 
+> **English** — A zero-trust, browser-side health checker for OpenAI-compatible API endpoints.
+> Point it at any Base URL: it lists the models, sends one real chat request and one SSE
+> streaming request per model, then scores the endpoint 0–100 with an A/B/F grade and exports a
+> shareable report. Your API key never leaves the browser — every request is a plain `fetch()`
+> from the page straight to the endpoint you typed, verifiable in DevTools → Network.
+> No backend, no account, no telemetry. Pure static frontend, AGPL-3.0.
+> _(The rest of this README is in Chinese.)_
+
 **在浏览器里直接检测你的 AI API 接口是否真的能用。**
 
 填入 Base URL 和 API Key，它会读取模型列表、对每个模型发一次真实请求、跑一次流式（SSE）探测，然后给出一份带 A/B/F 分级和健康评分的诊断报告。
 
-**在线版本：<https://myzgo.cn>** —— 不想自己部署就直接用；它是本仓库代码的部署产物，源码与线上版本一致。想自己跑见[快速开始](#快速开始)。
+**没有线上托管实例。** 这是纯静态前端，`npm install && npm run dev` 就能在本地跑起来 ——
+所有请求由你的浏览器直接发给你填的 Base URL，**自己跑和线上跑完全等价**，见[快速开始](#快速开始)。
+（原来的托管域名已随旧站下线，仓库里不再保留该地址。）
 
 > **API Key 不会离开你的浏览器。** 所有请求都由前端 `fetch` 直连你填的 Base URL —— 你可以在 DevTools → Network 里亲眼确认没有任何请求发往第三方域名。
 

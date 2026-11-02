@@ -19,14 +19,18 @@ export const GITHUB_URL = 'https://github.com/qingling-777/ZGo-API-doctor';
 
 /**
  * 项目方运营的线上实例（托管版）。
- * 不想自己部署的话可以直接用这个；它是本仓库代码的部署产物，
- * 源码与线上版本一致（AGPL-3.0 §13 要求网络服务提供者向用户提供源码）。
- * ⚠ Fork 后请把此项改掉或置空，不要让你的分支引流到项目方的实例。
+ *
+ * ⚠ 2026-11-02：原托管实例域名随旧站一并下线（HTTP 502 / TLS 握手失败），
+ *    因此这里**留空**、并把 `SHOW_HOSTED_LINK` 关掉，页脚不再出现"在线版本"入口 ——
+ *    宁可不给入口，也不要把用户送到一个打不开的地址。
+ *    将来若重新托管，把地址填回来并把 SHOW_HOSTED_LINK 置为 true 即可。
+ *
+ * ⚠ Fork 后同样请把此项改掉或保持置空，不要让你的分支引流到项目方的实例。
  */
-export const HOSTED_URL = 'https://myzgo.cn';
+export const HOSTED_URL = '';
 
-/** 是否在页脚展示线上实例入口。Fork 后建议置为 false。 */
-export const SHOW_HOSTED_LINK = true;
+/** 是否在页脚展示线上实例入口。当前无可用托管实例 ⇒ false。Fork 后同样建议 false。 */
+export const SHOW_HOSTED_LINK = false;
 
 /**
  * 经营主体全称（营业执照登记名称）。
