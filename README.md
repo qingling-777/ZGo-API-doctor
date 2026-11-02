@@ -1,150 +1,140 @@
 # ZGo API Doctor
 
-> **English** — A zero-trust, browser-side health checker for OpenAI-compatible API endpoints.
-> Point it at any Base URL: it lists the models, sends one real chat request and one SSE
-> streaming request per model, then scores the endpoint 0–100 with an A/B/F grade and exports a
-> shareable report. Your API key never leaves the browser — every request is a plain `fetch()`
-> from the page straight to the endpoint you typed, verifiable in DevTools → Network.
-> No backend, no account, no telemetry. Pure static frontend, AGPL-3.0.
-> _(The rest of this README is in Chinese.)_
+**Find out whether an AI API endpoint actually works — in your browser.**
 
-**在浏览器里直接检测你的 AI API 接口是否真的能用。**
+Paste a Base URL and an API key. The tool lists the models, sends one real chat request and one SSE streaming request per model, then produces a diagnostic report with an A/B/F grade and a 0–100 health score.
 
-填入 Base URL 和 API Key，它会读取模型列表、对每个模型发一次真实请求、跑一次流式（SSE）探测，然后给出一份带 A/B/F 分级和健康评分的诊断报告。
+**No hosted instance.** This is a pure static frontend: `npm install && npm run dev` and it runs locally. Every request goes straight from your browser to the endpoint you typed — **running it yourself is exactly equivalent to using a hosted copy**. See [Getting started](#getting-started).
 
-**没有线上托管实例。** 这是纯静态前端，`npm install && npm run dev` 就能在本地跑起来 ——
-所有请求由你的浏览器直接发给你填的 Base URL，**自己跑和线上跑完全等价**，见[快速开始](#快速开始)。
-（原来的托管域名已随旧站下线，仓库里不再保留该地址。）
+> **Your API key never leaves the browser.** Every request is a plain `fetch()` from the page to the Base URL you entered. Open DevTools → Network and confirm yourself: no request goes to any third-party domain.
 
-> **API Key 不会离开你的浏览器。** 所有请求都由前端 `fetch` 直连你填的 Base URL —— 你可以在 DevTools → Network 里亲眼确认没有任何请求发往第三方域名。
-
-![首页](./docs/images/01-home.png)
+![Home](./docs/images/01-home.png)
 
 <p align="center">
-  <img src="./docs/images/02-detect.png" width="49%" alt="检测页：填入 Base URL 与 API Key，选择协议与探测项目" />
-  <img src="./docs/images/03-integration.png" width="49%" alt="集成指南：三步把检测通过的接口接入你自己的项目" />
+  <img src="./docs/images/02-detect.png" width="49%" alt="Detect page: Base URL, API key, protocol and probe selection" />
+  <img src="./docs/images/03-integration.png" width="49%" alt="Integration guide: three steps to wire a passing endpoint into your own project" />
 </p>
 
 <p align="center">
-  <sub>左：检测页 —— 填 Base URL 与 Key，选协议与探测项，全程在浏览器内完成 ｜ 右：集成指南 —— 检测通过后如何接进你自己的代码</sub>
+  <sub>Left: the detect page — Base URL, key, protocol, probes, all in the browser ｜ Right: the integration guide — how to wire a passing endpoint into your code</sub>
 </p>
 
 ---
 
-## 目录
+## Contents
 
-- [为什么需要它](#为什么需要它)
-- [核心特性](#核心特性)
-- [快速开始](#快速开始)
-- [工作原理](#工作原理)
-- [评分规则](#评分规则)
-- [协议支持](#协议支持)
-- [常见问题](#常见问题)
-- [项目结构](#项目结构)
-- [相关文档](#相关文档)
-- [许可与品牌边界](#许可与品牌边界)
+- [Why you need it](#why-you-need-it)
+- [Features](#features)
+- [Getting started](#getting-started)
+- [How it works](#how-it-works)
+- [Scoring](#scoring)
+- [Supported protocols](#supported-protocols)
+- [FAQ](#faq)
+- [Project layout](#project-layout)
+- [Further reading](#further-reading)
+- [License and brand boundary](#license-and-brand-boundary)
 
 ---
 
-## 为什么需要它
+## Why you need it
 
-用 AI API 中转/代理服务时，常见的问题是：模型列表看着挺全，但某些模型实际调不通；延迟忽高忽低；流式响应回着回着断了。这些问题很难靠"再试一次"判断是服务商的问题还是自己代码的问题。
+When you use an AI API reseller or proxy, the usual problems are: the model list looks complete but some models simply do not respond; latency swings wildly; a stream dies halfway through. It is very hard to tell from "just try again" whether the problem is the provider or your own code.
 
-这个工具把"接口到底能不能用"变成一个可量化、可截图、可分享的结果 —— **并且不需要你把 Key 交给任何人**。
+This tool turns "does the endpoint work" into something quantifiable, screenshot-able and shareable — **without handing your key to anyone**.
 
-## 核心特性
+## Features
 
-| 特性 | 说明 |
+| Feature | Description |
 |---|---|
-| **零信任探测** | 请求从浏览器直发目标接口，Key 只出现在发给服务商的请求头里。源码见 [`src/lib/probeDirect.ts`](./src/lib/probeDirect.ts) |
-| **模型发现** | 调 `/v1/models` 拉取模型目录，不消耗额度；支持搜索过滤、批量勾选 |
-| **Chat + SSE 双探测** | 每个模型可选跑普通对话与流式，分别记录首字节（TTFT）与分片数 |
-| **A/B/F 分级** | 两个探测都过 = A；部分通过 = B；都失败 = F |
-| **健康评分** | 单值 0–100，便于横向对比多个服务商 |
-| **预检面板** | 探测前展开能看到本次将发送的每一个请求（URL / Header / Body），Key 已脱敏 |
-| **分享链接** | 报告编码进 URL hash，无需服务端即可分享（`#/report?d=...`） |
-| **导出报告** | 一键导出为可离线打开的自包含 HTML |
-| **接入模板** | 按协议生成 cURL / Python / Node 示例与常见 Agent 工具配置 |
+| **Zero-trust probing** | Requests go from the browser straight to the target endpoint; the key only ever appears in the request header sent to that provider. See [`src/lib/probeDirect.ts`](./src/lib/probeDirect.ts) |
+| **Model discovery** | Calls `/v1/models` to pull the catalogue without spending quota; search, filter, bulk select |
+| **Chat + SSE double probe** | Per model, optionally run a normal chat request and a streaming one, recording time-to-first-byte (TTFT) and chunk count |
+| **A/B/F grading** | Both probes pass = A; one passes = B; both fail = F |
+| **Health score** | A single 0–100 value, so several providers can be compared side by side |
+| **Pre-flight panel** | Before probing, expand to see every request that will be sent (URL / headers / body), with the key redacted |
+| **Shareable report** | The report is encoded into the URL hash — no server needed (`#/report?d=...`) |
+| **Export** | One click to export a self-contained HTML report that opens offline |
+| **Integration templates** | Generates cURL / Python / Node snippets plus common agent-tool configs per protocol |
 
-## 快速开始
+## Getting started
 
-需要 Node.js 18+。
+Requires Node.js 18+.
 
 ```bash
 npm install
 npm run dev      # http://localhost:5173
 ```
 
-构建生产版本：
+Production build:
 
 ```bash
-npm run build    # 产物在 dist/，纯静态，可部署到任意静态托管
-npm run preview  # 本地预览构建产物
+npm run build    # output in dist/, pure static, deployable to any static host
+npm run preview  # preview the build locally
 ```
 
-其他命令：
+Other commands:
 
 ```bash
 npm run typecheck   # tsc --noEmit
 npm run lint        # eslint
 ```
 
-> 这是**纯静态前端**，没有后端、没有数据库、没有账号体系。`dist/` 丢到任何静态托管（Vercel / Netlify / Nginx / 对象存储）都能跑。
+> This is a **pure static frontend**: no backend, no database, no accounts. Drop `dist/` on any static host (Vercel / Netlify / Nginx / object storage) and it runs.
 
-## 工作原理
+## How it works
 
-三个模块，全部在浏览器里完成：
-
-```
-src/lib/probeDirect.ts    探测引擎：发现模型 → 逐模型探测 → 归纳评分
-src/lib/mappers.ts        把探测结果映射成报告结构（纯函数）
-src/lib/share.ts          报告 ↔ URL token 编解码（纯前端）
-```
-
-一次完整探测的流程：
+Three modules, all executed in the browser:
 
 ```
-① 发现模型        GET  {base}/models            → 拿到模型 id 列表，不发聊天请求
-② 逐模型探测      POST {base}/chat/completions  → 普通对话，记录延迟与返回内容
-                  POST {base}/chat/completions  → stream:true，记录首字节与分片数
-③ 归纳评分        按 healthy / degraded 加权平均 → score + A/B/F 分级
+src/lib/probeDirect.ts    probe engine: discover models → probe each model → aggregate score
+src/lib/mappers.ts        maps probe results into the report structure (pure functions)
+src/lib/share.ts          report ↔ URL token encoding (frontend only)
 ```
 
-**关键点：每一步都是 `fetch()` 直连你填的域名。** 打开 DevTools → Network 面板，你会看到所有请求的 Host 都是你自己的服务商地址，没有一个是第三方的。
+A full probe run:
 
-超时策略（见 `probeDirect.ts`）：
+```
+1. Discover models   GET  {base}/models            → model id list, no chat request sent
+2. Probe each model  POST {base}/chat/completions  → normal chat, record latency and response
+                     POST {base}/chat/completions  → stream:true, record TTFT and chunk count
+3. Aggregate         weighted average of healthy / degraded → score + A/B/F grade
+```
 
-| 阶段 | 超时 |
+**The key point: every step is a `fetch()` straight to the domain you entered.** Open DevTools → Network and every request Host will be your own provider — none of them third-party.
+
+Timeout policy (see `probeDirect.ts`):
+
+| Stage | Timeout |
 |---|---|
-| 模型发现 | 8s |
-| 单个模型探测（Chat / SSE） | 12s |
-| 模型数上限 | 100 |
+| Model discovery | 8s |
+| Per-model probe (chat / SSE) | 12s |
+| Model count cap | 100 |
 
-## 评分规则
+## Scoring
 
-每个模型得到 A / B / F 三档之一：
+Each model gets one of three grades:
 
-| 分级 | 条件 |
+| Grade | Condition |
 |---|---|
-| **A** | Chat 与 SSE 探测都成功 |
-| **B** | 只有一个成功 |
-| **F** | 两个都失败 |
+| **A** | Both chat and SSE probes succeed |
+| **B** | Only one succeeds |
+| **F** | Both fail |
 
-总分是加权平均：
+The total score is a weighted average:
 
 ```
-score = round( (healthy × 100 + degraded × 65) / 探测模型数 )
+score = round( (healthy × 100 + degraded × 65) / models_probed )
 ```
 
-所以一个模型全 A 的报告是 100 分；有过半 B 的话分数会明显下移。这个公式的用意是**让"能不能用"和"用得顺不顺"合成一个可比数字**，方便你在多个中转站之间做横向对比。
+So a report where every model is A scores 100; if more than half are B, the score drops noticeably. The point of the formula is to **fold "does it work" and "does it work smoothly" into one comparable number**, so you can rank several resellers against each other.
 
-> 分数只反映**生成时刻**的单次观测。一次 100 分不代表长期稳定，一次低分也可能只是瞬时抖动 —— 所以工具同时保留了每个模型的原始延迟与首字节数据，供你自己判断。
+> The score reflects a **single observation at generation time**. 100 does not mean it is stable long-term, and a low score may just be a transient hiccup — which is why the tool also keeps the raw latency and TTFT for every model, so you can judge for yourself.
 
-## 协议支持
+## Supported protocols
 
-内置 5 种协议模板，自动适配路径与鉴权方式：
+Five built-in protocol templates handle path and auth differences automatically:
 
-| 协议 | 路径 | 鉴权 |
+| Protocol | Path | Auth |
 |---|---|---|
 | OpenAI | `/v1/chat/completions` | `Authorization: Bearer <key>` |
 | Anthropic | `/v1/messages` | `x-api-key` + `anthropic-version` |
@@ -152,22 +142,22 @@ score = round( (healthy × 100 + degraded × 65) / 探测模型数 )
 | Mistral | `/v1/chat/completions` | `Authorization: Bearer <key>` |
 | Cohere | `/v1/chat` | `Authorization: Bearer <key>` |
 
-传入别名也会被自动归一化（`claude` → `anthropic`，`google` → `gemini`，`command` → `cohere`）。
+Aliases are normalised automatically (`claude` → `anthropic`, `google` → `gemini`, `command` → `cohere`).
 
-## 常见问题
+## FAQ
 
-**Q：浏览器报 CORS 错误怎么办？**
+**Q: The browser throws a CORS error. What now?**
 
-这是最常见的问题。浏览器出于安全策略要求目标接口返回 `Access-Control-Allow-Origin` 响应头，而很多 API 服务商默认不返回（因为它们面向的是服务端调用，不是浏览器）。
+This is by far the most common issue. Browsers require the target endpoint to return an `Access-Control-Allow-Origin` response header, and many API providers do not send one by default — they are built for server-side callers, not browsers.
 
-三个办法：
+Three options:
 
-1. **换一个支持 CORS 的中转服务商** —— 多数面向终端用户的服务会开，因为它们知道用户可能在网页工具里用。
-2. **在目标接口侧加 CORS 头**（如果你能控制它）。
-3. **本地起一个反向代理**，把跨域变成同域 —— 例如：
+1. **Use a provider that supports CORS.** Most services aimed at end users enable it, because they know people may call them from web tools.
+2. **Add CORS headers on the endpoint** if you control it.
+3. **Run a local reverse proxy** so the cross-origin call becomes same-origin, for example:
 
    ```js
-   // vite.config.ts —— 开发时用 Vite 的代理
+   // vite.config.ts — use Vite's proxy in development
    server: {
      proxy: {
        '/proxy': {
@@ -179,69 +169,67 @@ score = round( (healthy × 100 + degraded × 65) / 探测模型数 )
    }
    ```
 
-   ⚠️ 注意：**一旦走代理，Key 就会经过代理服务器**，零信任的前提不再成立。用之前请确认你信任那台机器。本项目刻意不内置代理模式，就是不希望这条路径被顺手打开。
+   ⚠️ Note: **once a proxy is in the path, your key passes through the proxy machine** and the zero-trust premise no longer holds. Make sure you trust that machine. This project deliberately ships no built-in proxy mode, precisely so that this path is not opened by accident.
 
-**Q：检测会不会消耗我的额度？**
+**Q: Does probing consume my quota?**
 
-会。每次 Chat / SSE 探测都是一次真实请求。工具在开始前会显示"本次将发送 N 次请求"，并把 `max_tokens` 压到很小（16）来控制消耗。模型列表读取（`/v1/models`）通常不消耗额度。
+Yes. Every chat and SSE probe is a real request. Before starting, the tool shows "this run will send N requests" and clamps `max_tokens` down to 16 to limit the cost. Reading the model list (`/v1/models`) normally costs nothing.
 
-**Q：为什么某些模型显示 F，但我在别处能用？**
+**Q: Some model shows F, but I can use it elsewhere. Why?**
 
-常见原因：该服务商没实现这个模型的流式；或者模型的请求参数格式与 OpenAI 标准有差异。报告里的"错误码"和"返回内容预览"能看到具体原因。
+Common causes: the provider has not implemented streaming for that model, or the model's request format deviates from the OpenAI standard. The report's "error code" and "response preview" fields show the concrete reason.
 
-**Q：它只有这 5 种协议吗？**
+**Q: Are only these five protocols supported?**
 
-目前是。如果你的服务商是 OpenAI 兼容的（绝大多数中转站都是），选 OpenAI 协议即可。
+For now, yes. If your provider is OpenAI-compatible — which almost every reseller is — just pick the OpenAI protocol.
 
-**Q：数据会上传到哪吗？**
+**Q: Is any data uploaded anywhere?**
 
-不上传。没有后端、没有埋点、没有分析 SDK。表单草稿存在浏览器 localStorage 里，分享链接是把报告编码进 URL 本身。
+No. There is no backend, no telemetry, no analytics SDK. Form drafts live in browser `localStorage`, and a shared report is encoded into the URL itself.
 
-## 项目结构
+## Project layout
 
 ```
 src/
 ├── lib/
-│   ├── probeDirect.ts    ⭐ 探测引擎（零信任核心）
-│   ├── mappers.ts            探测结果 → 报告
-│   ├── share.ts              报告分享编解码
-│   ├── session.ts            表单草稿（localStorage）
-│   ├── site.ts               ⚠ 站点常量（含占位符，fork 需替换）
-│   └── api.ts                探测协议类型定义
+│   ├── probeDirect.ts    ⭐ probe engine (the zero-trust core)
+│   ├── mappers.ts            probe results → report
+│   ├── share.ts              report share encoding
+│   ├── session.ts            form drafts (localStorage)
+│   ├── site.ts               ⚠ site constants (placeholders — replace when forking)
+│   └── api.ts                protocol type definitions for probing
 ├── pages/
-│   ├── DetectPage.tsx        检测主流程
-│   ├── IntegrationPage.tsx   接入文档
-│   └── ...                   首页 / 关于 / 更新日志 / 隐私 / 条款 / 报告
-├── components/               首页区块与通用组件
-│   ├── TechDetails.tsx       技术原理
-│   ├── KeyZeroTrust.tsx      零信任源码自证
+│   ├── DetectPage.tsx        main detect flow
+│   ├── IntegrationPage.tsx   integration docs
+│   └── ...                   home / about / changelog / privacy / terms / report
+├── components/               home sections and shared components
+│   ├── TechDetails.tsx       how the internals work
+│   ├── KeyZeroTrust.tsx      zero-trust proof from the source
 │   └── ...
-├── router.ts                 hash 路由
+├── router.ts                 hash router
 └── App.tsx
 ```
 
-整个应用**没有后端**：`lib/api.ts` 只保留探测相关的类型与工具函数，
-其余（账号 / 支付 / 管理 / 密钥库）在开源版本中已移除。
+The app has **no backend**: `lib/api.ts` keeps only the types and helpers needed for probing. Everything else — accounts, payments, admin, key vault — has been removed from the open-source build.
 
-## 相关文档
+## Further reading
 
-- [docs/platform-diagnosis.md](./docs/platform-diagnosis.md) ——
-  《区分「平台挂了」与「你连不上」》，一套 AI API 平台可用性的分层诊断方法。
-  讲了怎么区分「服务商挂了」「域名被阻断」「DNS 被污染」这三件完全不同的事，
-  附可直接搬用的实现。本文档不依赖本项目代码，可独立阅读。
+- [docs/platform-diagnosis.md](./docs/platform-diagnosis.md) —
+  *Telling "the platform is down" apart from "you can't reach it"*: a layered method for diagnosing AI API platform availability.
+  It covers how to distinguish three very different failures — the provider is down, the domain is blocked, DNS is poisoned — with implementation you can lift directly. The document does not depend on this codebase and can be read on its own.
 
-## 许可与品牌边界
+## License and brand boundary
 
-本项目以 **AGPL-3.0-only** 发布 —— 见 [LICENSE](./LICENSE) 与 [NOTICE.md](./NOTICE.md)。
+Released under **AGPL-3.0-only** — see [LICENSE](./LICENSE) and [NOTICE.md](./NOTICE.md).
 
-选 AGPL 而不是 MIT，是因为它含有一条对网络服务特别重要的条款：
+AGPL rather than MIT on purpose, because it contains a clause that matters for network services:
 
-> **§13** —— 你若修改本程序并通过网络向用户提供服务，必须向这些用户提供修改后的完整源代码。
+> **§13** — If you modify this program and make it available to users over a network, you must offer those users the complete corresponding source of your modified version.
 
-换句话说：**你可以商用，但改了就得公开。** 这挡住了"拿开源代码改个名字做成闭源 SaaS"这条路。
+In other words: **commercial use is fine, but if you change it you have to publish it.** That closes off "take the open-source code, rename it, ship it as a closed SaaS".
 
-需要说清楚的是：**版权许可 ≠ 商标许可。「ZGo」名称与标识不在 AGPL 授权范围内**，未经许可不得使用。更完整的边界说明与 fork 检查清单见 [NOTICE.md](./NOTICE.md)。
+To be explicit: **a copyright licence is not a trademark licence. The "ZGo" name and marks are not covered by AGPL** and may not be used without permission. The full boundary and a fork checklist are in [NOTICE.md](./NOTICE.md).
 
 ---
 
-*另有一个不相关的姊妹项目：用同样的方法诊断**第三方平台**的 DNS 污染与 TLS 阻断，那是服务端的活，方法论已整理成一篇技术长文。*
+*A separate sister project applies the same method to diagnose **third-party platforms** for DNS poisoning and TLS blocking — a server-side job. The methodology is written up as a long-form technical article.*
